@@ -426,32 +426,6 @@ export async function overrideLeadCost(
 }
 
 /* =========================================================
-   Sample leads (for review until Granot is connected)
-   ========================================================= */
-export async function countSampleLeads(): Promise<number> {
-  const sb = await createClient();
-  const { count } = await sb
-    .from("leads")
-    .select("id", { count: "exact", head: true })
-    .eq("is_sample", true);
-  return count ?? 0;
-}
-
-export async function seedSampleLeads(): Promise<number> {
-  const sb = await createClient();
-  const { data, error } = await sb.rpc("admin_seed_sample_leads");
-  if (error) throw error;
-  return data ?? 0;
-}
-
-export async function clearSampleLeads(): Promise<number> {
-  const sb = await createClient();
-  const { data, error } = await sb.rpc("admin_clear_sample_leads");
-  if (error) throw error;
-  return data ?? 0;
-}
-
-/* =========================================================
    Granot webhook log (admin only)
    ========================================================= */
 export type GranotEventRow = {

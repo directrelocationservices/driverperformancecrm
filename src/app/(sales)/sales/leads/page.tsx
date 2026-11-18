@@ -1,3 +1,6 @@
+// File: src/app/(sales)/sales/leads/page.tsx
+// (REPLACE the whole file)
+
 import { RefreshCw } from "lucide-react";
 import { requireRole } from "@/lib/auth/session";
 import { getLeadSources, getLeads } from "@/lib/data";
@@ -41,7 +44,7 @@ export default async function MyLeadsPage({
         <RefreshCw className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
         <p>
           Leads are created automatically from Granot when they&apos;re assigned
-          to you. These are sample leads until Granot is connected.
+          to you, and update by themselves when Granot changes.
         </p>
       </div>
 

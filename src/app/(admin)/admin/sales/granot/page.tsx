@@ -19,10 +19,7 @@ import { formatDateTimeET } from "@/lib/format";
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Pill } from "@/components/shared/pill";
-import {
-  CopyField,
-  GranotTestButtons,
-} from "@/components/sales/granot-test-buttons";
+import { CopyField } from "@/components/sales/granot-test-buttons";
 import { GranotRepMap } from "@/components/sales/granot-rep-map";
 
 export const metadata = { title: "Granot Sync" };
@@ -97,15 +94,16 @@ export default async function GranotSyncPage() {
         </div>
 
         <div className="space-y-3 rounded-2xl border bg-card p-5">
-          <h2 className="text-lg font-bold">Test it</h2>
+          <h2 className="flex items-center gap-2 text-lg font-bold">
+            <Inbox className="h-5 w-5 text-primary" /> Last event
+          </h2>
           <p className="text-sm text-muted-foreground">
-            Sends a pretend Granot event through the same steps. Test leads
-            count as sample leads, so &ldquo;Remove all&rdquo; on Sales Reps
-            clears them.
+            {last
+              ? `${TYPE_LABELS[last.type] ?? last.type}${last.jobNumber ? ` · Job ${last.jobNumber}` : ""}`
+              : "No events yet"}
           </p>
-          <GranotTestButtons />
           <p className="text-xs text-muted-foreground">
-            Last event: {last ? formatDateTimeET(last.receivedAt) : "none yet"}
+            {last ? formatDateTimeET(last.receivedAt) : "Waiting for Granot"}
           </p>
         </div>
       </section>

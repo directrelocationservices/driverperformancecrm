@@ -25,8 +25,6 @@ import {
   renameLeadSource,
   setLeadSourceActive,
   removeLeadCost,
-  seedSampleLeads,
-  clearSampleLeads,
 } from "@/lib/data";
 import type { RecordKind } from "@/types";
 import { passwordRule } from "@/lib/validation/password";
@@ -292,35 +290,6 @@ export async function setLeadSourceActiveAction(
     return { error: "Couldn't update the source. Please try again." };
   }
   revalidateSales();
-}
-
-/** Sample leads for reviewing the sales screens before Granot is connected */
-export async function seedSampleLeadsAction(): Promise<{
-  error?: string;
-  count?: number;
-}> {
-  await requireRole("admin");
-  try {
-    const count = await seedSampleLeads();
-    revalidateSales();
-    return { count };
-  } catch {
-    return { error: "Couldn't add sample leads. Please try again." };
-  }
-}
-
-export async function clearSampleLeadsAction(): Promise<{
-  error?: string;
-  count?: number;
-}> {
-  await requireRole("admin");
-  try {
-    const count = await clearSampleLeads();
-    revalidateSales();
-    return { count };
-  } catch {
-    return { error: "Couldn't remove sample leads. Please try again." };
-  }
 }
 
 /* ---------- Users ---------- */

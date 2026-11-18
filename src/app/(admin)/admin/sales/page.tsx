@@ -11,7 +11,6 @@ import {
 } from "lucide-react";
 import { requireRole } from "@/lib/auth/session";
 import {
-  countSampleLeads,
   getAllRepMetrics,
   getLeadSources,
   getRepMonthlyTrend,
@@ -33,7 +32,6 @@ import { ParamPills } from "@/components/shared/param-pills";
 import { MetricChart } from "@/components/shared/metric-chart";
 import { RepsTable, type RepRow } from "@/components/sales/reps-table";
 import { SourceBreakdown } from "@/components/sales/source-breakdown";
-import { SampleLeadsCard } from "@/components/sales/sample-leads-card";
 
 export default async function AdminSalesPage({
   searchParams,
@@ -47,12 +45,11 @@ export default async function AdminSalesPage({
   const sourceId = resolveSourceId(sp.source, sources);
   const names = sourceNameMap(sources);
 
-  const [metrics, reps, breakdown, trend, sampleCount] = await Promise.all([
+  const [metrics, reps, breakdown, trend] = await Promise.all([
     getAllRepMetrics({ range, sourceId }),
     getReps(true),
     getSourceBreakdown({ range }),
     getRepMonthlyTrend(undefined, 6),
-    countSampleLeads(),
   ]);
 
   const active = Object.fromEntries(reps.map((r) => [r.id, r.active]));
@@ -77,7 +74,6 @@ export default async function AdminSalesPage({
           </a>
         }
       />
-      <SampleLeadsCard count={sampleCount} />
       <FilterBar showVerified={false} />
       <ParamPills
         param="source"
