@@ -1,11 +1,15 @@
+// File: src/lib/format.ts
+// (REPLACE the whole file)
+
 import { format, parseISO } from "date-fns";
 import type { Job } from "@/types";
 
+/** Money always with 2 decimals: $16,150.50, $5,370.00 */
 export function formatCurrency(n: number) {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
-    minimumFractionDigits: 0,
+    minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(n);
 }
