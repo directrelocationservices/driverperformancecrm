@@ -606,6 +606,7 @@ export type Database = {
           email: string;
           granot_name: string | null;
           id: string;
+          must_change_password: boolean;
           name: string;
           phone: string | null;
           role: Database["public"]["Enums"]["user_role"];
@@ -618,6 +619,7 @@ export type Database = {
           email: string;
           granot_name?: string | null;
           id: string;
+          must_change_password?: boolean;
           name: string;
           phone?: string | null;
           role?: Database["public"]["Enums"]["user_role"];
@@ -630,6 +632,7 @@ export type Database = {
           email?: string;
           granot_name?: string | null;
           id?: string;
+          must_change_password?: boolean;
           name?: string;
           phone?: string | null;
           role?: Database["public"]["Enums"]["user_role"];

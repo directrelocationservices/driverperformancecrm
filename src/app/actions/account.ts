@@ -1,9 +1,12 @@
+// File: src/app/actions/account.ts
+// (REPLACE the whole file)
+
 "use server";
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { createClient as createPlainClient } from "@supabase/supabase-js";
-import { requireUser } from "@/lib/auth/session";
+import { getSession, requireUser } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { updateOwnProfile } from "@/lib/data";
 import { passwordRule } from "@/lib/validation/password";
@@ -64,7 +67,9 @@ const passwordSchema = z
 export async function changePasswordAction(
   input: z.infer<typeof passwordSchema>,
 ): Promise<AccountResult> {
-  const user = await requireUser();
+  // getSession (not requireUser): this also runs from the first-login page
+  const user = await getSession();
+  if (!user) return { error: "Please log in again." };
   const parsed = passwordSchema.safeParse(input);
   if (!parsed.success) return { fieldErrors: toFieldErrors(parsed.error) };
 
@@ -86,6 +91,13 @@ export async function changePasswordAction(
     password: parsed.data.next,
   });
   if (error) return { error: error.message };
+
+  // Their own password now: no more first-login prompt
+  await createAdminClient()
+    .from("profiles")
+    .update({ must_change_password: false })
+    .eq("id", user.id);
+  revalidatePath("/", "layout");
 }
 
 /** Save (or remove) a profile photo. Users can change their own; admins can change anyone's. */

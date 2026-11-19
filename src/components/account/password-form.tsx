@@ -1,3 +1,6 @@
+// File: src/components/account/password-form.tsx
+// (REPLACE the whole file)
+
 "use client";
 
 import { useState, useTransition } from "react";
@@ -49,7 +52,14 @@ function PasswordInput({
   );
 }
 
-export function PasswordForm() {
+export function PasswordForm({
+  firstLogin,
+  redirectTo,
+}: {
+  /** First login: different wording, and go to the portal when done */
+  firstLogin?: boolean;
+  redirectTo?: string;
+} = {}) {
   const [pending, startTransition] = useTransition();
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [v, setV] = useState(EMPTY);
@@ -70,7 +80,10 @@ export function PasswordForm() {
       const res = await changePasswordAction(v);
       if (res?.fieldErrors) setErrors(res.fieldErrors);
       else if (res?.error) toast.error(res.error);
-      else {
+      else if (redirectTo) {
+        toast.success("Password set. Welcome!");
+        window.location.assign(redirectTo);
+      } else {
         setV(EMPTY);
         setErrors({});
         toast.success(
@@ -83,11 +96,15 @@ export function PasswordForm() {
   return (
     <form onSubmit={submit} noValidate id="password" className="scroll-mt-24">
       <FormSection
-        title="Change password"
-        description="Recommended if you're still using a temporary password."
+        title={firstLogin ? "Set your password" : "Change password"}
+        description={
+          firstLogin
+            ? "You're using a temporary password. Choose your own password to continue."
+            : "Recommended if you're still using a temporary password."
+        }
       >
         <Field
-          label="Current password"
+          label={firstLogin ? "Temporary password" : "Current password"}
           htmlFor="pw-current"
           error={errors.current}
         >
@@ -148,6 +165,8 @@ export function PasswordForm() {
           >
             {pending ? (
               <Loader2 className="h-5 w-5 animate-spin" />
+            ) : firstLogin ? (
+              "Save and continue"
             ) : (
               "Update password"
             )}

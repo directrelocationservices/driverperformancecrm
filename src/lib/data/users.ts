@@ -1,3 +1,6 @@
+// File: src/lib/data/users.ts
+// (REPLACE the whole file)
+
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Role, User } from "@/types";
@@ -179,5 +182,11 @@ export async function setUserPassword(
 ): Promise<boolean> {
   const admin = createAdminClient();
   const { error } = await admin.auth.admin.updateUserById(id, { password });
-  return !error;
+  if (error) return false;
+  // A password set by admin is temporary: the user changes it at next login
+  await admin
+    .from("profiles")
+    .update({ must_change_password: true })
+    .eq("id", id);
+  return true;
 }

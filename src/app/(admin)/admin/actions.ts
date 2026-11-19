@@ -405,7 +405,7 @@ const settingsSchema = z.object({
     usdot: z.string().trim().min(1, "USDOT # is required").max(20),
     mc: z.string().trim().min(1, "MC # is required").max(20),
     address: z.string().trim().min(3, "Address is required").max(200),
-    phone: z.string().trim().min(7, "Phone is required").max(30),
+    phone: z.string().trim().min(7, "Phone is required").max(80),
     email: z.string().trim().email("Enter a valid email"),
   }),
   damageAlertEmails: z

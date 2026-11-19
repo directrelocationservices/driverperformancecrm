@@ -1,3 +1,6 @@
+// File: src/lib/auth/session.ts
+// (REPLACE the whole file)
+
 import { cache } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
@@ -14,7 +17,9 @@ export const getSession = cache(async (): Promise<User | null> => {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("id, name, email, phone, role, active, avatar_url")
+    .select(
+      "id, name, email, phone, role, active, avatar_url, must_change_password",
+    )
     .eq("id", user.id)
     .maybeSingle();
 
@@ -28,12 +33,14 @@ export const getSession = cache(async (): Promise<User | null> => {
     role: profile.role,
     active: profile.active,
     avatarUrl: profile.avatar_url ?? undefined,
+    mustChangePassword: profile.must_change_password,
   };
 });
 
 export async function requireRole(role: Role) {
   const user = await getSession();
   if (!user) redirect("/login");
+  if (user.mustChangePassword) redirect("/change-password");
   // Send them to their own portal (never to "/", which could loop)
   if (user.role !== role) redirect(homeFor(user.role));
   return user;
@@ -43,5 +50,6 @@ export async function requireRole(role: Role) {
 export async function requireUser() {
   const user = await getSession();
   if (!user) redirect("/login");
+  if (user.mustChangePassword) redirect("/change-password");
   return user;
 }

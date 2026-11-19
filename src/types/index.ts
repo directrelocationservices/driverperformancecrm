@@ -11,6 +11,8 @@ export interface User {
   role: Role;
   active: boolean;
   avatarUrl?: string;
+  /** Must set a new password before using the portal */
+  mustChangePassword?: boolean;
 }
 
 export type DeliveredBy = "drs" | "partner";
