@@ -1,3 +1,6 @@
+// File: src/components/admin/user-dialog.tsx
+// (REPLACE the whole file)
+
 "use client";
 
 import { useState, useTransition } from "react";
@@ -17,10 +20,13 @@ import { ROLE_LABELS, type Role, type User } from "@/types";
 import { useRouter } from "next/navigation";
 import { AvatarUploader } from "@/components/shared/avatar-uploader";
 
-const ROLES = (Object.keys(ROLE_LABELS) as Role[]).map((r) => ({
-  value: r,
-  label: ROLE_LABELS[r],
-}));
+// Carrier logins are made on the carrier's page, not here
+const ROLES = (Object.keys(ROLE_LABELS) as Role[])
+  .filter((r) => r !== "carrier")
+  .map((r) => ({
+    value: r,
+    label: ROLE_LABELS[r],
+  }));
 
 type Props = {
   open: boolean;
@@ -82,7 +88,10 @@ export function UserDialog({
     e.preventDefault();
     setFormError(undefined);
     startTransition(async () => {
-      const input = { ...values, role: values.role as Role };
+      const input = {
+        ...values,
+        role: values.role as Exclude<Role, "carrier">,
+      };
 
       if (mode === "create") {
         const res = await createUserAction(input);

@@ -86,11 +86,198 @@ export type Database = {
           },
         ];
       };
+      carrier_claim_notes: {
+        Row: {
+          claim_id: string;
+          created_at: string;
+          created_by: string | null;
+          file_names: string[];
+          file_paths: string[];
+          id: string;
+          internal: boolean;
+          note: string;
+        };
+        Insert: {
+          claim_id: string;
+          created_at?: string;
+          created_by?: string | null;
+          file_names?: string[];
+          file_paths?: string[];
+          id?: string;
+          internal?: boolean;
+          note: string;
+        };
+        Update: {
+          claim_id?: string;
+          created_at?: string;
+          created_by?: string | null;
+          file_names?: string[];
+          file_paths?: string[];
+          id?: string;
+          internal?: boolean;
+          note?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "carrier_claim_notes_claim_id_fkey";
+            columns: ["claim_id"];
+            isOneToOne: false;
+            referencedRelation: "carrier_claims";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "carrier_claim_notes_created_by_fkey";
+            columns: ["created_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      carrier_claims: {
+        Row: {
+          carrier_id: string;
+          charged_back_amount: number;
+          claim_amount: number;
+          created_at: string;
+          created_by: string | null;
+          deleted_at: string | null;
+          description: string;
+          id: string;
+          item: string;
+          job_id: string;
+          paid_amount: number;
+          photo_paths: string[];
+          status: string;
+          updated_at: string;
+        };
+        Insert: {
+          carrier_id: string;
+          charged_back_amount?: number;
+          claim_amount?: number;
+          created_at?: string;
+          created_by?: string | null;
+          deleted_at?: string | null;
+          description: string;
+          id?: string;
+          item: string;
+          job_id: string;
+          paid_amount?: number;
+          photo_paths?: string[];
+          status?: string;
+          updated_at?: string;
+        };
+        Update: {
+          carrier_id?: string;
+          charged_back_amount?: number;
+          claim_amount?: number;
+          created_at?: string;
+          created_by?: string | null;
+          deleted_at?: string | null;
+          description?: string;
+          id?: string;
+          item?: string;
+          job_id?: string;
+          paid_amount?: number;
+          photo_paths?: string[];
+          status?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "carrier_claims_carrier_id_fkey";
+            columns: ["carrier_id"];
+            isOneToOne: false;
+            referencedRelation: "carriers";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "carrier_claims_created_by_fkey";
+            columns: ["created_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "carrier_claims_job_id_fkey";
+            columns: ["job_id"];
+            isOneToOne: false;
+            referencedRelation: "jobs";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      carriers: {
+        Row: {
+          active: boolean;
+          company_name: string;
+          contact_email: string | null;
+          contact_name: string | null;
+          contact_phone: string | null;
+          created_at: string;
+          created_by: string | null;
+          id: string;
+          insurance_alert_sent_for: string | null;
+          insurance_expires: string | null;
+          insurance_file_name: string | null;
+          insurance_path: string | null;
+          mc_number: string | null;
+          notes: string | null;
+          updated_at: string;
+          usdot: string | null;
+        };
+        Insert: {
+          active?: boolean;
+          company_name: string;
+          contact_email?: string | null;
+          contact_name?: string | null;
+          contact_phone?: string | null;
+          created_at?: string;
+          created_by?: string | null;
+          id?: string;
+          insurance_alert_sent_for?: string | null;
+          insurance_expires?: string | null;
+          insurance_file_name?: string | null;
+          insurance_path?: string | null;
+          mc_number?: string | null;
+          notes?: string | null;
+          updated_at?: string;
+          usdot?: string | null;
+        };
+        Update: {
+          active?: boolean;
+          company_name?: string;
+          contact_email?: string | null;
+          contact_name?: string | null;
+          contact_phone?: string | null;
+          created_at?: string;
+          created_by?: string | null;
+          id?: string;
+          insurance_alert_sent_for?: string | null;
+          insurance_expires?: string | null;
+          insurance_file_name?: string | null;
+          insurance_path?: string | null;
+          mc_number?: string | null;
+          notes?: string | null;
+          updated_at?: string;
+          usdot?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "carriers_created_by_fkey";
+            columns: ["created_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       damage_incidents: {
         Row: {
           claim_filed: boolean;
           created_at: string;
           created_by: string | null;
+          damage_date: string | null;
           deleted_at: string | null;
           description: string;
           estimated_cost: number;
@@ -98,11 +285,13 @@ export type Database = {
           item: string;
           job_id: string;
           photo_paths: string[];
+          source: string;
         };
         Insert: {
           claim_filed: boolean;
           created_at?: string;
           created_by?: string | null;
+          damage_date?: string | null;
           deleted_at?: string | null;
           description: string;
           estimated_cost: number;
@@ -110,11 +299,13 @@ export type Database = {
           item: string;
           job_id: string;
           photo_paths: string[];
+          source?: string;
         };
         Update: {
           claim_filed?: boolean;
           created_at?: string;
           created_by?: string | null;
+          damage_date?: string | null;
           deleted_at?: string | null;
           description?: string;
           estimated_cost?: number;
@@ -122,6 +313,7 @@ export type Database = {
           item?: string;
           job_id?: string;
           photo_paths?: string[];
+          source?: string;
         };
         Relationships: [
           {
@@ -133,6 +325,58 @@ export type Database = {
           },
           {
             foreignKeyName: "damage_incidents_job_id_fkey";
+            columns: ["job_id"];
+            isOneToOne: false;
+            referencedRelation: "jobs";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      damage_notes: {
+        Row: {
+          created_at: string;
+          created_by: string | null;
+          damage_id: string;
+          id: string;
+          job_id: string;
+          note: string;
+          photo_paths: string[];
+        };
+        Insert: {
+          created_at?: string;
+          created_by?: string | null;
+          damage_id: string;
+          id?: string;
+          job_id: string;
+          note: string;
+          photo_paths?: string[];
+        };
+        Update: {
+          created_at?: string;
+          created_by?: string | null;
+          damage_id?: string;
+          id?: string;
+          job_id?: string;
+          note?: string;
+          photo_paths?: string[];
+        };
+        Relationships: [
+          {
+            foreignKeyName: "damage_notes_created_by_fkey";
+            columns: ["created_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "damage_notes_damage_id_fkey";
+            columns: ["damage_id"];
+            isOneToOne: false;
+            referencedRelation: "damage_incidents";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "damage_notes_job_id_fkey";
             columns: ["job_id"];
             isOneToOne: false;
             referencedRelation: "jobs";
@@ -183,6 +427,7 @@ export type Database = {
       };
       jobs: {
         Row: {
+          carrier_id: string | null;
           created_at: string;
           crew_ids: string[];
           date: string;
@@ -198,6 +443,7 @@ export type Database = {
           origin_state: string;
         };
         Insert: {
+          carrier_id?: string | null;
           created_at?: string;
           crew_ids?: string[];
           date: string;
@@ -213,6 +459,7 @@ export type Database = {
           origin_state: string;
         };
         Update: {
+          carrier_id?: string | null;
           created_at?: string;
           crew_ids?: string[];
           date?: string;
@@ -228,6 +475,13 @@ export type Database = {
           origin_state?: string;
         };
         Relationships: [
+          {
+            foreignKeyName: "jobs_carrier_id_fkey";
+            columns: ["carrier_id"];
+            isOneToOne: false;
+            referencedRelation: "carriers";
+            referencedColumns: ["id"];
+          },
           {
             foreignKeyName: "jobs_driver_id_fkey";
             columns: ["driver_id"];
@@ -605,6 +859,7 @@ export type Database = {
         Row: {
           active: boolean;
           avatar_url: string | null;
+          carrier_id: string | null;
           created_at: string;
           email: string;
           granot_name: string | null;
@@ -618,6 +873,7 @@ export type Database = {
         Insert: {
           active?: boolean;
           avatar_url?: string | null;
+          carrier_id?: string | null;
           created_at?: string;
           email: string;
           granot_name?: string | null;
@@ -631,6 +887,7 @@ export type Database = {
         Update: {
           active?: boolean;
           avatar_url?: string | null;
+          carrier_id?: string | null;
           created_at?: string;
           email?: string;
           granot_name?: string | null;
@@ -641,7 +898,15 @@ export type Database = {
           role?: Database["public"]["Enums"]["user_role"];
           updated_at?: string;
         };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: "profiles_carrier_id_fkey";
+            columns: ["carrier_id"];
+            isOneToOne: false;
+            referencedRelation: "carriers";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       reviews: {
         Row: {
@@ -1052,6 +1317,19 @@ export type Database = {
     };
     Functions: {
       admin_clear_sample_leads: { Args: never; Returns: number };
+      admin_correct_damage: {
+        Args: {
+          p_claim_filed: boolean;
+          p_damage_date: string;
+          p_description: string;
+          p_estimated_cost: number;
+          p_id: string;
+          p_item: string;
+          p_reason: string;
+          p_source: string;
+        };
+        Returns: string;
+      };
       admin_correct_pre_damage: {
         Args: {
           p_customer_name: string;
@@ -1093,6 +1371,7 @@ export type Database = {
         Args: { p_date: string; p_source: string };
         Returns: number;
       };
+      my_carrier_id: { Args: never; Returns: string };
       new_deleted_is_null: { Args: { p: Json }; Returns: boolean };
       owns_job: { Args: { p_job: string }; Returns: boolean };
       recalc_lead_costs: { Args: { p_source: string }; Returns: number };
@@ -1107,7 +1386,7 @@ export type Database = {
       ticket_status: "open" | "in_progress" | "fixed";
       truck_status: "safe" | "repair_soon" | "do_not_drive";
       upsell_type: "packing" | "storage" | "materials" | "other";
-      user_role: "admin" | "driver" | "sales_rep";
+      user_role: "admin" | "driver" | "sales_rep" | "carrier";
     };
     CompositeTypes: {
       [_ in never]: never;
@@ -1245,7 +1524,7 @@ export const Constants = {
       ticket_status: ["open", "in_progress", "fixed"],
       truck_status: ["safe", "repair_soon", "do_not_drive"],
       upsell_type: ["packing", "storage", "materials", "other"],
-      user_role: ["admin", "driver", "sales_rep"],
+      user_role: ["admin", "driver", "sales_rep", "carrier"],
     },
   },
 } as const;

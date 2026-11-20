@@ -23,6 +23,7 @@ import {
   Wrench,
   Container,
   Webhook,
+  Building2,
 } from "lucide-react";
 
 export type NavItem = { href: string; label: string; icon: LucideIcon };
@@ -59,6 +60,7 @@ export const ADMIN_NAV: NavGroup[] = [
       { href: "/admin/trucks", label: "Trucks", icon: Container },
       { href: "/admin/maintenance", label: "Maintenance", icon: Wrench },
       { href: "/admin/roadside", label: "Roadside", icon: Siren },
+      { href: "/admin/carriers", label: "Carriers", icon: Building2 },
     ],
   },
   {
@@ -126,5 +128,12 @@ export const SALES_NAV_GROUPS: NavGroup[] = [
   {
     title: "Leads",
     items: [{ href: "/sales/leads", label: "My Leads", icon: ListChecks }],
+  },
+];
+
+export const CARRIER_NAV_GROUPS: NavGroup[] = [
+  {
+    title: "Claims",
+    items: [{ href: "/carrier", label: "Damage claims", icon: ListChecks }],
   },
 ];

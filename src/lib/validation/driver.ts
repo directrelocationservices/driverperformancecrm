@@ -156,3 +156,59 @@ export const reviewServerSchema = z
     path: ["link"],
   });
 export type ReviewServerInput = z.infer<typeof reviewServerSchema>;
+
+/* ---------- Admin damage reports ---------- */
+export const DAMAGE_SOURCES = [
+  "customer_call",
+  "claim",
+  "inspection",
+  "other",
+] as const;
+
+const adminDamageBase = {
+  jobId: z.string().min(1, "Enter a job number from this driver's jobs"),
+  damageDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Select a date"),
+  source: z.enum(DAMAGE_SOURCES, { message: "Select where this came from" }),
+  item: z.string().trim().min(1, "Item is required").max(120),
+  description: z.string().trim().min(1, "Describe what happened").max(1000),
+  claimFiled: z.boolean({ message: "Select yes or no" }),
+  estimatedCost: z
+    .number({ message: "Enter an estimated cost" })
+    .min(0, "Cost can't be negative")
+    .max(1_000_000),
+};
+
+export const adminDamageSchema = z.object({
+  ...adminDamageBase,
+  photos: z
+    .array(z.string().startsWith("data:image/"))
+    .max(MAX_PHOTOS, `Maximum ${MAX_PHOTOS} photos`),
+});
+
+export const adminDamageServerSchema = z.object({
+  ...adminDamageBase,
+  photos: z.array(storagePath).max(MAX_PHOTOS, `Maximum ${MAX_PHOTOS} photos`),
+});
+
+export const damageCorrectionSchema = z.object({
+  id: z.string().min(1),
+  item: adminDamageBase.item,
+  description: adminDamageBase.description,
+  damageDate: adminDamageBase.damageDate.nullable(),
+  source: z.enum(["driver", ...DAMAGE_SOURCES]),
+  claimFiled: z.boolean(),
+  estimatedCost: adminDamageBase.estimatedCost,
+  reason: z
+    .string()
+    .trim()
+    .min(3, "Give a reason for this correction")
+    .max(500),
+});
+export type DamageCorrectionInput = z.infer<typeof damageCorrectionSchema>;
+
+export const damageNoteServerSchema = z.object({
+  damageId: z.string().min(1),
+  jobId: z.string().min(1),
+  note: z.string().trim().min(1, "Write a note").max(2000),
+  photos: z.array(storagePath).max(MAX_PHOTOS, `Maximum ${MAX_PHOTOS} photos`),
+});

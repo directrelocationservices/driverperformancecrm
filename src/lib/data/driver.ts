@@ -10,6 +10,8 @@ import type {
   AuditEntry,
   CompanyInfo,
   DamageIncident,
+  DamageNote,
+  DamageSource,
   DateRange,
   DriverMetrics,
   Job,
@@ -53,6 +55,7 @@ const toJob = (r: JobRow): Job => ({
   onTimePickup: r.on_time_pickup,
   onTimeDelivery: r.on_time_delivery,
   createdAt: r.created_at,
+  carrierId: r.carrier_id,
 });
 
 /** Private files → short-lived links the browser can open */
@@ -77,7 +80,7 @@ const url = (m: Map<string, string>, p: string | null | undefined) =>
    Jobs
    ========================================================= */
 const JOB_COLS =
-  "id, job_number, date, origin_city, origin_state, dest_city, dest_state, driver_id, crew_ids, delivered_by, on_time_pickup, on_time_delivery, created_at";
+  "id, job_number, date, origin_city, origin_state, dest_city, dest_state, driver_id, crew_ids, delivered_by, on_time_pickup, on_time_delivery, created_at, carrier_id";
 
 export async function getJobsByDriver(
   driverId: string,
@@ -131,7 +134,7 @@ export async function getJobDetail(
     .maybeSingle();
   if (!job) return null;
 
-  const [pre, dmg, rev, ups] = await Promise.all([
+  const [pre, dmg, rev, ups, notes] = await Promise.all([
     sb
       .from("pre_damages")
       .select("*")
@@ -144,7 +147,10 @@ export async function getJobDetail(
       .order("created_at"),
     sb.from("reviews").select("*").eq("job_id", jobId).order("created_at"),
     sb.from("upsells").select("*").eq("job_id", jobId).order("created_at"),
+    // Admin notes on damage (the database only returns these to admins)
+    sb.from("damage_notes").select("*").eq("job_id", jobId).order("created_at"),
   ]);
+  const noteRows = notes.data ?? [];
 
   const keep = <T extends { deleted_at: string | null }>(rows: T[] | null) =>
     (rows ?? []).filter((r) => opts.includeDeleted || alive(r));
@@ -157,6 +163,7 @@ export async function getJobDetail(
   const signed = await signPaths([
     ...preRows.flatMap((p) => [...p.photo_paths, p.signature_path]),
     ...dmgRows.flatMap((d) => d.photo_paths),
+    ...noteRows.flatMap((n) => n.photo_paths),
     ...revRows.map((r) => r.screenshot_path ?? ""),
   ]);
 
@@ -190,6 +197,18 @@ export async function getJobDetail(
     estimatedCost: Number(d.estimated_cost),
     createdAt: d.created_at,
     deletedAt: d.deleted_at,
+    damageDate: d.damage_date,
+    source: d.source as DamageSource,
+    createdBy: d.created_by,
+    notes: noteRows
+      .filter((n) => n.damage_id === d.id)
+      .map((n): DamageNote => ({
+        id: n.id,
+        note: n.note,
+        photos: n.photo_paths.map((x) => url(signed, x)).filter(Boolean),
+        createdBy: n.created_by,
+        createdAt: n.created_at,
+      })),
   }));
 
   const reviews: Review[] = revRows.map((r) => ({
@@ -499,6 +518,9 @@ export async function createDamage(input: {
   photoPaths: string[];
   claimFiled: boolean;
   estimatedCost: number;
+  /** Admin entries only */
+  damageDate?: string;
+  source?: DamageSource;
 }): Promise<{ id: string; jobId: string }> {
   const sb = await createClient();
   const { data, error } = await sb
@@ -510,6 +532,8 @@ export async function createDamage(input: {
       photo_paths: input.photoPaths,
       claim_filed: input.claimFiled,
       estimated_cost: input.estimatedCost,
+      damage_date: input.damageDate ?? null,
+      source: input.source ?? "driver",
     })
     .select("id, job_id")
     .single();
@@ -562,7 +586,9 @@ export async function createUpsell(input: {
    ========================================================= */
 export async function updateJob(
   id: string,
-  patch: Partial<Pick<Job, "deliveredBy" | "onTimePickup" | "onTimeDelivery">>,
+  patch: Partial<
+    Pick<Job, "deliveredBy" | "onTimePickup" | "onTimeDelivery" | "carrierId">
+  >,
   // kept for compatibility; the database records who made the change
   _changedBy?: string,
 ): Promise<Job | null> {
@@ -572,6 +598,7 @@ export async function updateJob(
   if (patch.onTimePickup !== undefined) row.on_time_pickup = patch.onTimePickup;
   if (patch.onTimeDelivery !== undefined)
     row.on_time_delivery = patch.onTimeDelivery;
+  if (patch.carrierId !== undefined) row.carrier_id = patch.carrierId;
 
   const { data, error } = await sb
     .from("jobs")
@@ -613,6 +640,64 @@ export async function updatePreDamage(
     throw error;
   }
   return { jobId: data };
+}
+
+export async function correctDamage(
+  id: string,
+  patch: {
+    item: string;
+    description: string;
+    damageDate: string | null;
+    source: DamageSource;
+    claimFiled: boolean;
+    estimatedCost: number;
+  },
+  reason: string,
+): Promise<{ jobId: string } | null> {
+  const sb = await createClient();
+  const { data, error } = await sb.rpc("admin_correct_damage", {
+    p_id: id,
+    p_item: patch.item,
+    p_description: patch.description,
+    // A "date" argument: null is sent when the record has no date
+    p_damage_date: patch.damageDate as string,
+    p_source: patch.source,
+    p_claim_filed: patch.claimFiled,
+    p_estimated_cost: patch.estimatedCost,
+    p_reason: reason,
+  });
+  if (error) {
+    if (/not found/i.test(error.message)) return null;
+    throw error;
+  }
+  return { jobId: data };
+}
+
+export async function getDamageJobId(damageId: string) {
+  if (!isUuid(damageId)) return null;
+  const sb = await createClient();
+  const { data } = await sb
+    .from("damage_incidents")
+    .select("job_id")
+    .eq("id", damageId)
+    .maybeSingle();
+  return data?.job_id ?? null;
+}
+
+export async function addDamageNote(input: {
+  damageId: string;
+  jobId: string;
+  note: string;
+  photoPaths: string[];
+}) {
+  const sb = await createClient();
+  const { error } = await sb.from("damage_notes").insert({
+    damage_id: input.damageId,
+    job_id: input.jobId, // the database sets this from the damage record
+    note: input.note,
+    photo_paths: input.photoPaths,
+  });
+  if (error) throw error;
 }
 
 export async function setVerified(

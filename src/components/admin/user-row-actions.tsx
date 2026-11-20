@@ -1,3 +1,6 @@
+// File: src/components/admin/user-row-actions.tsx
+// (REPLACE the whole file)
+
 "use client";
 
 import { useState, useTransition } from "react";
@@ -19,7 +22,7 @@ import { useRouter } from "next/navigation";
 const btn =
   "flex h-9 items-center gap-1.5 rounded-lg border bg-white px-3 text-sm font-semibold transition disabled:opacity-50";
 
-function SetPasswordDialog({
+export function SetPasswordDialog({
   user,
   open,
   onClose,

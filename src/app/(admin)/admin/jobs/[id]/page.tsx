@@ -1,3 +1,6 @@
+// File: src/app/(admin)/admin/jobs/[id]/page.tsx
+// (REPLACE the whole file)
+
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
@@ -16,12 +19,22 @@ import {
   History,
   Lock,
   MapPin,
+  MessageSquare,
+  Package,
+  Plus,
   Star,
   User as UserIcon,
   Users,
 } from "lucide-react";
 import { requireRole } from "@/lib/auth/session";
-import { getAuditLog, getJobDetail, getUsers } from "@/lib/data";
+import {
+  getAuditLog,
+  getCarrierClaims,
+  getCarriers,
+  getJobDetail,
+  getUsers,
+} from "@/lib/data";
+import { ClaimStatusPill } from "@/components/carriers/claim-status-pill";
 import { ACTION_LABELS, diffLines } from "@/lib/audit";
 import {
   formatCurrency,
@@ -35,8 +48,11 @@ import { PhotoThumb } from "@/components/shared/photo-thumb";
 import { VerifyToggle } from "@/components/admin/verify-toggle";
 import { RecordActions } from "@/components/admin/record-actions";
 import { PreDamageCorrection } from "@/components/admin/pre-damage-correction";
+import { DamageCorrection } from "@/components/admin/damage-correction";
+import { DamageNoteForm } from "@/components/admin/damage-note-form";
 import { JobStatusForm } from "@/components/admin/job-status-form";
 import {
+  DAMAGE_SOURCE_LABELS,
   REVIEW_PLATFORM_LABELS,
   UPSELL_TYPE_LABELS,
   type AuditEntry,
@@ -47,11 +63,13 @@ function Section({
   title,
   icon: Icon,
   count,
+  action,
   children,
 }: {
   title: string;
   icon: React.ElementType;
   count: number;
+  action?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
@@ -62,6 +80,7 @@ function Section({
         <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-bold">
           {count}
         </span>
+        {action && <div className="ml-auto">{action}</div>}
       </div>
       <div className="p-4 sm:p-5">
         {count === 0 ? (
@@ -166,10 +185,16 @@ export default async function AdminJobDetail({
   const job = await getJobDetail(id, { includeDeleted: showDeleted });
   if (!job) notFound();
 
-  const [users, audit] = await Promise.all([
+  const [users, audit, carriers, claims] = await Promise.all([
     getUsers(),
     getAuditLog({ jobId: id }),
+    getCarriers(),
+    getCarrierClaims({ jobId: id }),
   ]);
+  const carrierOptions = carriers
+    .filter((c) => c.active || c.id === job.carrierId)
+    .map((c) => ({ id: c.id, name: c.companyName }));
+  const jobCarrier = carriers.find((c) => c.id === job.carrierId);
   const names = Object.fromEntries(users.map((u) => [u.id, u.name]));
   const crew = job.crewIds
     .map((c) => names[c])
@@ -256,7 +281,41 @@ export default async function AdminJobDetail({
         </div>
       </div>
 
-      <JobStatusForm job={job} />
+      <JobStatusForm job={job} carriers={carrierOptions} />
+
+      {job.deliveredBy === "partner" && (
+        <Section
+          title="Carrier claims"
+          icon={Package}
+          count={claims.length}
+          action={
+            jobCarrier ? (
+              <Link
+                href={`/admin/carriers/${jobCarrier.id}/claims/new?job=${job.id}`}
+                className="flex h-9 items-center gap-1.5 rounded-lg border bg-white px-3 text-sm font-semibold transition hover:border-foreground/30"
+              >
+                <Plus className="h-4 w-4" /> Add claim
+              </Link>
+            ) : undefined
+          }
+        >
+          <div className="divide-y">
+            {claims.map((c) => (
+              <Link
+                key={c.id}
+                href={`/admin/carriers/claims/${c.id}`}
+                className="flex flex-wrap items-center justify-between gap-2 py-3 first:pt-0 last:pb-0 hover:text-primary"
+              >
+                <span className="font-semibold">{c.item}</span>
+                <span className="flex items-center gap-2 text-sm text-muted-foreground">
+                  {formatCurrency(c.claimAmount)}
+                  <ClaimStatusPill status={c.status} />
+                </span>
+              </Link>
+            ))}
+          </div>
+        </Section>
+      )}
 
       {/* Pre-existing damage */}
       <Section
@@ -383,6 +442,14 @@ export default async function AdminJobDetail({
         title="Damage incidents"
         icon={AlertTriangle}
         count={job.damages.length}
+        action={
+          <Link
+            href={`/admin/jobs/${job.id}/damage/new`}
+            className="flex h-9 items-center gap-1.5 rounded-lg border bg-white px-3 text-sm font-semibold transition hover:border-foreground/30"
+          >
+            <Plus className="h-4 w-4" /> Add damage
+          </Link>
+        }
       >
         <div className="space-y-4">
           {job.damages.map((d) => (
@@ -394,8 +461,18 @@ export default async function AdminJobDetail({
               )}
             >
               <div className="flex flex-wrap items-start justify-between gap-2">
-                <p className="font-semibold">{d.item}</p>
+                <div className="min-w-0">
+                  <p className="font-semibold">{d.item}</p>
+                  {d.damageDate && (
+                    <p className="text-sm text-muted-foreground">
+                      Damage date: {formatDate(d.damageDate)}
+                    </p>
+                  )}
+                </div>
                 <div className="flex flex-wrap items-center gap-1.5">
+                  {d.source && d.source !== "driver" && (
+                    <Pill tone="primary">{DAMAGE_SOURCE_LABELS[d.source]}</Pill>
+                  )}
                   <Pill tone={d.claimFiled ? "danger" : "neutral"}>
                     {d.claimFiled ? "Claim filed" : "No claim"}
                   </Pill>
@@ -415,18 +492,57 @@ export default async function AdminJobDetail({
                   ))}
                 </div>
               )}
-              <div className="mt-3 flex items-center justify-between gap-2">
-                <p className="text-xs text-muted-foreground">
-                  {job.deliveredBy === "partner"
-                    ? "Partner delivery · not counted in damage rate"
-                    : `Reported ${formatDateTimeET(d.createdAt)}`}
+
+              {(d.notes ?? []).length > 0 && (
+                <ol className="mt-4 space-y-3 rounded-lg bg-muted/50 p-3">
+                  {(d.notes ?? []).map((n) => (
+                    <li key={n.id} className="text-sm">
+                      <p className="flex flex-wrap items-center gap-1.5 font-semibold">
+                        <MessageSquare className="h-3.5 w-3.5 text-muted-foreground" />
+                        {names[n.createdBy ?? ""] ?? "Admin"}
+                        <span className="font-normal text-muted-foreground">
+                          · {formatDateTimeET(n.createdAt)}
+                        </span>
+                      </p>
+                      <p className="mt-0.5 whitespace-pre-line">{n.note}</p>
+                      {n.photos.length > 0 && (
+                        <div className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-5">
+                          {n.photos.map((src, i) => (
+                            <PhotoThumb
+                              key={src + i}
+                              src={src}
+                              alt={`Note photo ${i + 1}`}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </li>
+                  ))}
+                </ol>
+              )}
+
+              <div className="mt-3 flex flex-wrap items-start justify-between gap-2">
+                <p className="pt-2 text-xs text-muted-foreground">
+                  {d.source && d.source !== "driver" ? "Entered" : "Reported"}{" "}
+                  by {names[d.createdBy ?? ""] ?? "Unknown"} ·{" "}
+                  {formatDateTimeET(d.createdAt)}
+                  {job.deliveredBy === "partner" &&
+                    " · Partner delivery, not counted in damage rate"}
                 </p>
-                <RecordActions
-                  kind="damage"
-                  id={d.id}
-                  deleted={!!d.deletedAt}
-                />
+                <div className="flex flex-wrap items-start justify-end gap-2">
+                  {!d.deletedAt && (
+                    <DamageNoteForm damageId={d.id} jobId={job.id} />
+                  )}
+                  {!d.deletedAt && <DamageCorrection record={d} />}
+                  <RecordActions
+                    kind="damage"
+                    id={d.id}
+                    deleted={!!d.deletedAt}
+                  />
+                </div>
               </div>
+
+              <HistoryList entries={historyFor(d.id)} names={names} />
             </article>
           ))}
         </div>

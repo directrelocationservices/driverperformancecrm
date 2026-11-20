@@ -1,4 +1,8 @@
+// File: src/app/(admin)/admin/page.tsx
+// (REPLACE the whole file)
+
 import Link from "next/link";
+import { after } from "next/server";
 import {
   ArrowRight,
   BadgePercent,
@@ -14,6 +18,7 @@ import {
 } from "lucide-react";
 import { requireRole } from "@/lib/auth/session";
 import {
+  flagCarrierInsurance,
   getAllDriverMetrics,
   getAllJobSummaries,
   getAllRepMetrics,
@@ -62,6 +67,7 @@ export default async function AdminDashboard({
   searchParams: Promise<FilterParams>;
 }) {
   await requireRole("admin");
+  after(flagCarrierInsurance); // carrier insurance expiry emails
   const { range, verifiedOnly, label } = resolveFilters(await searchParams);
 
   const [driverRows, repRows, jobs, users] = await Promise.all([

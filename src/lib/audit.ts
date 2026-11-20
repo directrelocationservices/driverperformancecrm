@@ -9,6 +9,7 @@ export const ENTITY_LABELS: Record<EntityType, string> = {
   damage: "Damage incident",
   review: "Review",
   upsell: "Upsell",
+  carrier_claim: "Carrier claim",
 };
 
 export const ACTION_LABELS: Record<AuditAction, string> = {
@@ -41,6 +42,12 @@ const FIELD_LABELS: Record<string, string> = {
   amount: "Amount",
   claim_filed: "Claim filed",
   estimated_cost: "Estimated cost",
+  claim_amount: "Claim amount",
+  paid_amount: "Paid",
+  charged_back_amount: "Charged back",
+  status: "Status",
+  damage_date: "Damage date",
+  source: "Source",
   photo: "Photos",
   signature: "Signature",
   screenshot: "Screenshot",
@@ -78,6 +85,15 @@ const humanize = (k: string) =>
 const VALUE_LABELS: Record<string, string> = {
   drs: "DRS crew",
   partner: "Partner",
+  driver: "Driver report",
+  customer_call: "Customer call",
+  claim: "Claim",
+  inspection: "Inspection",
+  open: "Open",
+  submitted: "Submitted to carrier",
+  paid: "Paid",
+  closed: "Closed",
+  other: "Other",
 };
 
 export function formatAuditValue(v: unknown) {

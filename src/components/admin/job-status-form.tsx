@@ -1,9 +1,12 @@
+// File: src/components/admin/job-status-form.tsx
+// (REPLACE the whole file)
+
 "use client";
 
 import { useState, useTransition } from "react";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Field, Segmented } from "@/components/driver/form-bits";
+import { Field, NativeSelect, Segmented } from "@/components/driver/form-bits";
 import { updateJobAction } from "@/app/(admin)/admin/actions";
 import type { Job } from "@/types";
 import { toast } from "sonner";
@@ -19,17 +22,26 @@ const TRI = [
   { value: "unknown" as Tri, label: "Pending" },
 ];
 
-export function JobStatusForm({ job }: { job: Job }) {
+export function JobStatusForm({
+  job,
+  carriers = [],
+}: {
+  job: Job;
+  /** Carriers to pick from when the job was delivered by a partner */
+  carriers?: { id: string; name: string }[];
+}) {
   const [pending, startTransition] = useTransition();
   const [deliveredBy, setDeliveredBy] = useState(job.deliveredBy);
   const [pickup, setPickup] = useState<Tri>(toTri(job.onTimePickup));
   const [delivery, setDelivery] = useState<Tri>(toTri(job.onTimeDelivery));
+  const [carrierId, setCarrierId] = useState(job.carrierId ?? "");
   const [saved, setSaved] = useState(false);
 
   const dirty =
     deliveredBy !== job.deliveredBy ||
     pickup !== toTri(job.onTimePickup) ||
-    delivery !== toTri(job.onTimeDelivery);
+    delivery !== toTri(job.onTimeDelivery) ||
+    carrierId !== (job.carrierId ?? "");
 
   const save = () =>
     startTransition(async () => {
@@ -38,6 +50,7 @@ export function JobStatusForm({ job }: { job: Job }) {
         deliveredBy,
         onTimePickup: toBool(pickup),
         onTimeDelivery: toBool(delivery),
+        carrierId: deliveredBy === "partner" ? carrierId || null : null,
       });
       if (res?.error) toast.error(res.error);
       else toast.success("Job status saved");
@@ -69,6 +82,25 @@ export function JobStatusForm({ job }: { job: Job }) {
           <Segmented value={delivery} onChange={setDelivery} options={TRI} />
         </Field>
       </div>
+      {deliveredBy === "partner" && (
+        <Field
+          label="Carrier"
+          hint="The partner company that delivered this job. Used for carrier claims and scorecards."
+          className="mt-4 max-w-md"
+        >
+          <NativeSelect
+            value={carrierId}
+            onChange={(e) => setCarrierId(e.target.value)}
+          >
+            <option value="">Not set</option>
+            {carriers.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </NativeSelect>
+        </Field>
+      )}
       {dirty && (
         <div className="mt-4 flex justify-end">
           <Button

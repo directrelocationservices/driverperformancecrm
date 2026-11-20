@@ -1,3 +1,6 @@
+// File: src/app/(admin)/admin/users/page.tsx
+// (REPLACE the whole file)
+
 import Link from "next/link";
 import { Search, X } from "lucide-react";
 import { requireRole } from "@/lib/auth/session";
@@ -19,6 +22,7 @@ const ROLE_TONE: Record<Role, "dark" | "primary" | "neutral"> = {
   admin: "dark",
   driver: "primary",
   sales_rep: "neutral",
+  carrier: "neutral",
 };
 
 type StatusFilter = "active" | "inactive";
@@ -30,7 +34,8 @@ export default async function UsersPage({
 }) {
   const me = await requireRole("admin");
   const { role, q = "", status } = await searchParams;
-  const all = await getUsers();
+  // Carrier logins are managed on each carrier's page
+  const all = (await getUsers()).filter((u) => u.role !== "carrier");
 
   const roleFilter = role && role in ROLE_LABELS ? (role as Role) : undefined;
   const statusFilter: StatusFilter | undefined =
@@ -55,10 +60,12 @@ export default async function UsersPage({
     );
 
   const roleCount = (r: Role) => all.filter((u) => u.role === r).length;
-  const roleOptions = (Object.keys(ROLE_LABELS) as Role[]).map((r) => ({
-    value: r,
-    label: `${ROLE_LABELS[r]}s (${roleCount(r)})`,
-  }));
+  const roleOptions = (Object.keys(ROLE_LABELS) as Role[])
+    .filter((r) => r !== "carrier")
+    .map((r) => ({
+      value: r,
+      label: `${ROLE_LABELS[r]}s (${roleCount(r)})`,
+    }));
 
   const activeCount = all.filter((u) => u.active).length;
   const inactiveCount = all.length - activeCount;

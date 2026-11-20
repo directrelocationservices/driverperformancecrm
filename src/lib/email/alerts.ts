@@ -1,5 +1,5 @@
 // File: src/lib/email/alerts.ts
-// (NEW file)
+// (REPLACE the whole file)
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { CHECK_ITEMS } from "@/types";
@@ -44,7 +44,7 @@ async function send(
   rows: [string, string][],
   link: string,
   button: string,
-) {
+): Promise<boolean> {
   const key = process.env.RESEND_API_KEY;
   const from = process.env.ALERT_FROM_EMAIL;
   if (!key || !from) {
@@ -52,7 +52,7 @@ async function send(
       "[alerts] RESEND_API_KEY or ALERT_FROM_EMAIL not set, email skipped:",
       subject,
     );
-    return;
+    return false;
   }
   const to = await getRecipients();
   if (!to.length) {
@@ -60,7 +60,7 @@ async function send(
       "[alerts] No alert emails in Settings, email skipped:",
       subject,
     );
-    return;
+    return false;
   }
 
   const table = rows
@@ -95,14 +95,16 @@ async function send(
     body: JSON.stringify({ from, to, subject, html, text }),
   });
   if (!res.ok) throw new Error(`Resend ${res.status}: ${await res.text()}`);
+  return true;
 }
 
-/** Never throws: a failed email must not fail the driver's save */
-async function safe(fn: () => Promise<void>) {
+/** Never throws: a failed email must not fail the driver's save. True when sent. */
+async function safe(fn: () => Promise<boolean>): Promise<boolean> {
   try {
-    await fn();
+    return await fn();
   } catch (err) {
     console.error("[alerts] email failed", err);
+    return false;
   }
 }
 
@@ -166,6 +168,35 @@ export function sendDoNotDriveAlert(input: {
       ],
       appUrl() ? `${appUrl()}/admin/pre-trip/${input.preTripId}` : "",
       "Open the inspection",
+    ),
+  );
+}
+
+/** Carrier insurance expires soon (or already expired). True when the email went out. */
+export function sendInsuranceExpiryAlert(input: {
+  carrierId: string;
+  companyName: string;
+  expires: string;
+  days: number;
+  expired: boolean;
+}) {
+  return safe(() =>
+    send(
+      input.expired
+        ? `Insurance expired: ${input.companyName}`
+        : `Insurance expires in ${input.days} day${input.days === 1 ? "" : "s"}: ${input.companyName}`,
+      [
+        ["Carrier", input.companyName],
+        ["Insurance expires", input.expires],
+        [
+          "Status",
+          input.expired
+            ? `Expired ${input.days} day${input.days === 1 ? "" : "s"} ago`
+            : `${input.days} day${input.days === 1 ? "" : "s"} left`,
+        ],
+      ],
+      appUrl() ? `${appUrl()}/admin/carriers/${input.carrierId}` : "",
+      "Open the carrier",
     ),
   );
 }

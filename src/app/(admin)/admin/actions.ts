@@ -25,7 +25,20 @@ import {
   renameLeadSource,
   setLeadSourceActive,
   removeLeadCost,
+  addDamageNote,
+  correctDamage,
+  createDamage,
+  getDamageJobId,
+  getJob,
 } from "@/lib/data";
+import {
+  adminDamageServerSchema,
+  damageCorrectionSchema,
+  damageNoteServerSchema,
+  toFieldErrors as driverFieldErrors,
+  type DamageCorrectionInput,
+} from "@/lib/validation/driver";
+import { isEvidencePathFor } from "@/lib/evidence/paths";
 import type { RecordKind } from "@/types";
 import { passwordRule } from "@/lib/validation/password";
 
@@ -159,6 +172,7 @@ const jobPatchSchema = z.object({
   deliveredBy: z.enum(["drs", "partner"]),
   onTimePickup: z.boolean().nullable(),
   onTimeDelivery: z.boolean().nullable(),
+  carrierId: z.string().uuid().nullable().optional(),
 });
 
 export async function updateJobAction(
@@ -438,4 +452,85 @@ export async function updateSettingsAction(
   );
   if (error) return { error };
   revalidatePath("/admin/settings");
+}
+
+/* =========================================================
+   Admin damage reports
+   ========================================================= */
+const damagePathsOk = (paths: string[], jobId: string) =>
+  paths.every((p) => isEvidencePathFor(p, jobId, "damage"));
+
+/** Damage added by an admin (customer call, claim, inspection...) */
+export async function adminCreateDamageAction(input: unknown): Promise<{
+  error?: string;
+  fieldErrors?: Record<string, string>;
+  jobId?: string;
+}> {
+  await requireRole("admin");
+  const parsed = adminDamageServerSchema.safeParse(input);
+  if (!parsed.success) return { fieldErrors: driverFieldErrors(parsed.error) };
+  const d = parsed.data;
+
+  const job = /^[0-9a-f-]{36}$/i.test(d.jobId) ? await getJob(d.jobId) : null;
+  if (!job) return { fieldErrors: { jobId: "Job not found" } };
+  if (!damagePathsOk(d.photos, job.id))
+    return { error: "Photos didn't upload correctly. Please try again." };
+
+  const { error } = await attempt(() =>
+    createDamage({
+      jobId: job.id,
+      item: d.item,
+      description: d.description,
+      photoPaths: d.photos,
+      claimFiled: d.claimFiled,
+      estimatedCost: d.estimatedCost,
+      damageDate: d.damageDate,
+      source: d.source,
+    }),
+  );
+  if (error) return { error };
+  revalidateJob(job.id);
+  revalidatePath(`/admin/drivers/${job.driverId}`);
+  return { jobId: job.id };
+}
+
+export async function correctDamageAction(
+  input: DamageCorrectionInput,
+): Promise<AdminResult> {
+  await requireRole("admin");
+  const parsed = damageCorrectionSchema.safeParse(input);
+  if (!parsed.success) return { fieldErrors: toFieldErrors(parsed.error) };
+
+  const { id, reason, ...fields } = parsed.data;
+  const { value: rec, error } = await attempt(() =>
+    correctDamage(id, fields, reason),
+  );
+  if (error) return { error };
+  if (!rec) return { error: "Record not found." };
+  revalidateJob(rec.jobId);
+}
+
+export async function addDamageNoteAction(
+  input: unknown,
+): Promise<AdminResult> {
+  await requireRole("admin");
+  const parsed = damageNoteServerSchema.safeParse(input);
+  if (!parsed.success) return { fieldErrors: toFieldErrors(parsed.error) };
+  const d = parsed.data;
+
+  const jobId = await getDamageJobId(d.damageId);
+  if (!jobId || jobId !== d.jobId) return { error: "Record not found." };
+  if (!damagePathsOk(d.photos, jobId))
+    return { error: "Photos didn't upload correctly. Please try again." };
+
+  const { error } = await attempt(() =>
+    addDamageNote({
+      damageId: d.damageId,
+      jobId,
+      note: d.note,
+      photoPaths: d.photos,
+    }),
+  );
+  if (error) return { error };
+  revalidateJob(jobId);
 }

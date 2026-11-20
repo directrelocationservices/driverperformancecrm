@@ -1,7 +1,7 @@
 // File: src/types/index.ts
 // (REPLACE the whole file)
 
-export type Role = "admin" | "driver" | "sales_rep";
+export type Role = "admin" | "driver" | "sales_rep" | "carrier";
 
 export interface User {
   id: string;
@@ -31,6 +31,8 @@ export interface Job {
   onTimePickup: boolean | null;
   onTimeDelivery: boolean | null;
   createdAt: string;
+  /** Carrier that delivered a "Partner" job */
+  carrierId?: string | null;
 }
 
 export interface PreDamage {
@@ -53,6 +55,26 @@ export interface PreDamage {
   deletedAt?: string | null;
 }
 
+export type DamageSource =
+  "driver" | "customer_call" | "claim" | "inspection" | "other";
+
+export const DAMAGE_SOURCE_LABELS: Record<DamageSource, string> = {
+  driver: "Driver report",
+  customer_call: "Customer call",
+  claim: "Claim",
+  inspection: "Inspection",
+  other: "Other",
+};
+
+/** Admin note on a damage incident (admins only) */
+export interface DamageNote {
+  id: string;
+  note: string;
+  photos: string[];
+  createdBy: string | null;
+  createdAt: string;
+}
+
 export interface DamageIncident {
   id: string;
   jobId: string;
@@ -63,6 +85,11 @@ export interface DamageIncident {
   estimatedCost: number;
   createdAt: string;
   deletedAt?: string | null;
+  /** Day the damage happened (admin entries); null for older driver reports */
+  damageDate?: string | null;
+  source?: DamageSource;
+  createdBy?: string | null;
+  notes?: DamageNote[];
 }
 
 export type ReviewPlatform =
@@ -179,7 +206,7 @@ export interface MonthlyPoint {
 }
 
 export type RecordKind = "pre_damage" | "damage" | "review" | "upsell";
-export type EntityType = RecordKind | "job";
+export type EntityType = RecordKind | "job" | "carrier_claim";
 export type AuditAction =
   "create" | "update" | "delete" | "restore" | "verify" | "unverify";
 
@@ -200,6 +227,7 @@ export const ROLE_LABELS: Record<Role, string> = {
   admin: "Admin",
   driver: "Driver",
   sales_rep: "Sales Rep",
+  carrier: "Carrier",
 };
 
 export interface CompanyInfo {
@@ -470,4 +498,97 @@ export interface DriverScore {
   base: number;
   score: number;
   lines: ScoreLine[];
+}
+
+/* ---------- Carriers (partner companies) ---------- */
+export interface Carrier {
+  id: string;
+  companyName: string;
+  usdot: string | null;
+  mcNumber: string | null;
+  contactName: string | null;
+  contactPhone: string | null;
+  contactEmail: string | null;
+  /** Private storage path of the insurance certificate */
+  insurancePath: string | null;
+  insuranceFileName: string | null;
+  /** YYYY-MM-DD */
+  insuranceExpires: string | null;
+  notes: string | null;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type ClaimStatus = "open" | "submitted" | "paid" | "closed";
+
+export const CLAIM_STATUS_LABELS: Record<ClaimStatus, string> = {
+  open: "Open",
+  submitted: "Submitted to carrier",
+  paid: "Paid",
+  closed: "Closed",
+};
+
+/** A file on a claim, with a short-lived link */
+export interface ClaimFile {
+  name: string;
+  url: string;
+  isPdf: boolean;
+}
+
+export interface CarrierClaimNote {
+  id: string;
+  note: string;
+  files: ClaimFile[];
+  internal: boolean;
+  createdBy: string | null;
+  createdAt: string;
+}
+
+/** Damage on a partner delivery, claimed against the carrier */
+export interface CarrierClaim {
+  id: string;
+  carrierId: string;
+  jobId: string;
+  jobNumber: string;
+  jobDate: string;
+  item: string;
+  description: string;
+  claimAmount: number;
+  paidAmount: number;
+  chargedBackAmount: number;
+  status: ClaimStatus;
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+}
+
+export interface CarrierClaimDetail extends CarrierClaim {
+  photos: string[];
+  notes: CarrierClaimNote[];
+  /** Pre-existing damage photos taken at pickup (the job's pre-damage records) */
+  pickup: {
+    item: string;
+    location: string;
+    description: string;
+    photos: string[];
+  }[];
+}
+
+export interface CarrierScore {
+  carrierId: string;
+  companyName: string;
+  active: boolean;
+  jobs: number;
+  claims: number;
+  jobsWithClaims: number;
+  /** Share of jobs with at least one claim (0-1) */
+  claimRate: number;
+  claimed: number;
+  paid: number;
+  chargedBack: number;
+  /** What the damage cost DRS: paid to customers minus charged back */
+  netCost: number;
+  openClaims: number;
 }

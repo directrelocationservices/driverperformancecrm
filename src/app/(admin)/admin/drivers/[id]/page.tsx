@@ -1,3 +1,6 @@
+// File: src/app/(admin)/admin/drivers/[id]/page.tsx
+// (REPLACE the whole file)
+
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
@@ -7,6 +10,7 @@ import {
   DollarSign,
   Mail,
   Phone,
+  Plus,
   Receipt,
   ShieldAlert,
   Star,
@@ -105,6 +109,12 @@ export default async function AdminDriverProfile({
             )}
           </div>
         </div>
+        <Link
+          href={`/admin/drivers/${driver.id}/damage/new`}
+          className="flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-lg border bg-white px-4 text-sm font-semibold transition hover:border-foreground/30"
+        >
+          <Plus className="h-4 w-4" /> Add damage
+        </Link>
       </div>
 
       <FilterBar />
