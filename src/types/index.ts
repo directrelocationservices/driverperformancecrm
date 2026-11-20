@@ -120,6 +120,9 @@ export interface DriverMetrics {
 /** Rep row for leads whose Granot rep isn't linked to a portal account yet */
 export const UNMATCHED_REP_ID = "unmatched";
 
+/** Rep row for leads that have no sales rep in Granot at all */
+export const UNASSIGNED_REP_ID = "unassigned";
+
 export interface RepMetrics {
   repId: string;
   repName: string;
@@ -237,6 +240,8 @@ export interface Lead {
   jobValue: number | null;
   /** Sample lead for review (removed before Granot goes live) */
   isSample?: boolean;
+  /** Sales rep username as sent by Granot (kept even when not linked) */
+  granotRep?: string | null;
 }
 
 export interface LeadCost {

@@ -20,7 +20,7 @@ import type {
   SalesMonthlyPoint,
   SourceBreakdownRow,
 } from "@/types";
-import { UNMATCHED_REP_ID } from "@/types";
+import { UNASSIGNED_REP_ID, UNMATCHED_REP_ID } from "@/types";
 import type { Database } from "@/types/supabase";
 
 type LeadRow = Database["public"]["Tables"]["leads"]["Row"];
@@ -124,7 +124,7 @@ export async function setLeadSourceActive(
    Leads + metrics (reps only see their own leads; the database enforces it)
    ========================================================= */
 const LEAD_COLS =
-  "id, granot_id, date, rep_id, source_id, lead_cost, cost_overridden, status, booked_date, job_value, is_sample";
+  "id, granot_id, date, rep_id, source_id, lead_cost, cost_overridden, status, booked_date, job_value, is_sample, granot_rep";
 
 const toLead = (
   l: Pick<
@@ -140,6 +140,7 @@ const toLead = (
     | "booked_date"
     | "job_value"
     | "is_sample"
+    | "granot_rep"
   >,
 ): Lead => ({
   id: l.id,
@@ -153,7 +154,25 @@ const toLead = (
   bookedDate: l.booked_date,
   jobValue: l.job_value === null ? null : Number(l.job_value),
   isSample: l.is_sample,
+  granotRep: l.granot_rep,
 });
+
+/** Supabase returns at most 1000 rows per request, so read big lists page by page */
+const PAGE = 1000;
+async function fetchAll<T>(
+  page: (
+    from: number,
+    to: number,
+  ) => PromiseLike<{ data: T[] | null; error: unknown }>,
+): Promise<T[]> {
+  const out: T[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await page(from, from + PAGE - 1);
+    if (error) throw error;
+    out.push(...(data ?? []));
+    if (!data || data.length < PAGE) return out;
+  }
+}
 
 export async function getLeads(
   opts: {
@@ -165,19 +184,21 @@ export async function getLeads(
 ): Promise<Lead[]> {
   const sb = await createClient();
   // Leads with "test" in the customer name or lead source never count
-  let q = sb.from("leads").select(LEAD_COLS).eq("is_test", false);
-  if (opts.repId) q = q.eq("rep_id", opts.repId);
-  if (opts.sourceId) q = q.eq("source_id", opts.sourceId);
-  if (opts.status === "open" || opts.status === "booked")
-    q = q.eq("status", opts.status);
-  if (opts.range?.from) q = q.gte("date", opts.range.from);
-  if (opts.range?.to) q = q.lte("date", opts.range.to);
-  const { data, error } = await q
-    .order("date", { ascending: false })
-    .order("created_at", { ascending: false })
-    .limit(5000);
-  if (error) throw error;
-  return (data ?? []).map(toLead);
+  const build = () => {
+    let q = sb.from("leads").select(LEAD_COLS).eq("is_test", false);
+    if (opts.repId) q = q.eq("rep_id", opts.repId);
+    if (opts.sourceId) q = q.eq("source_id", opts.sourceId);
+    if (opts.status === "open" || opts.status === "booked")
+      q = q.eq("status", opts.status);
+    if (opts.range?.from) q = q.gte("date", opts.range.from);
+    if (opts.range?.to) q = q.lte("date", opts.range.to);
+    return q
+      .order("date", { ascending: false })
+      .order("created_at", { ascending: false })
+      .order("id");
+  };
+  const data = await fetchAll((from, to) => build().range(from, to));
+  return data.map(toLead);
 }
 
 function summarizeLeads(leads: Lead[]) {
@@ -216,9 +237,24 @@ export async function getAllRepMetrics(
     repName: r.name,
     ...summarizeLeads(leads.filter((l) => l.repId === r.id)),
   }));
-  // Leads whose Granot rep isn't linked to anyone: still counted, shown as "Unmatched"
+  // Leads with no sales rep in Granot at all: still counted, shown as "Unassigned"
   const known = new Set(reps.map((r) => r.id));
-  const unmatched = leads.filter((l) => !l.repId || !known.has(l.repId));
+  const unassigned = leads.filter(
+    (l) => !l.repId && !(l.granotRep ?? "").trim(),
+  );
+  if (unassigned.length) {
+    rows.push({
+      repId: UNASSIGNED_REP_ID,
+      repName: "Unassigned",
+      ...summarizeLeads(unassigned),
+    });
+  }
+  // Leads whose Granot rep isn't linked to anyone: still counted, shown as "Unmatched"
+  const unmatched = leads.filter(
+    (l) =>
+      (l.repId && !known.has(l.repId)) ||
+      (!l.repId && (l.granotRep ?? "").trim()),
+  );
   if (unmatched.length) {
     rows.push({
       repId: UNMATCHED_REP_ID,
@@ -482,16 +518,18 @@ export async function getUnmatchedGranotReps(): Promise<
   { username: string; leads: number }[]
 > {
   const sb = await createClient();
-  const { data, error } = await sb
-    .from("leads")
-    .select("granot_rep")
-    .eq("is_test", false)
-    .is("rep_id", null)
-    .not("granot_rep", "is", null)
-    .limit(5000);
-  if (error) throw error;
+  const data = await fetchAll((from, to) =>
+    sb
+      .from("leads")
+      .select("granot_rep")
+      .eq("is_test", false)
+      .is("rep_id", null)
+      .not("granot_rep", "is", null)
+      .order("id")
+      .range(from, to),
+  );
   const counts = new Map<string, number>();
-  for (const l of data ?? []) {
+  for (const l of data) {
     const u = (l.granot_rep ?? "").trim();
     if (u) counts.set(u, (counts.get(u) ?? 0) + 1);
   }

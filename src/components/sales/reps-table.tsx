@@ -3,7 +3,7 @@
 
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { ArrowDown, ArrowUp, ChevronRight, ChevronsUpDown } from "lucide-react";
 import { UserAvatar } from "@/components/shared/user-avatar";
@@ -11,7 +11,7 @@ import { Pill } from "@/components/shared/pill";
 import { NativeSelect } from "@/components/driver/form-bits";
 import { formatCurrency, formatPercent } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { UNMATCHED_REP_ID, type RepMetrics } from "@/types";
+import { UNASSIGNED_REP_ID, UNMATCHED_REP_ID, type RepMetrics } from "@/types";
 
 export type RepRow = RepMetrics & { active: boolean };
 type Key = keyof RepMetrics;
@@ -51,7 +51,30 @@ const rowHref = (r: RepRow) =>
     ? "/admin/sales/granot"
     : `/admin/sales/reps/${r.repId}`;
 
+/** Unassigned leads have no rep to open, so that row is not a link */
+function RowLink({
+  r,
+  className,
+  children,
+  ...rest
+}: {
+  r: RepRow;
+  className?: string;
+  children: ReactNode;
+  "aria-label"?: string;
+}) {
+  if (r.repId === UNASSIGNED_REP_ID)
+    return <div className={className}>{children}</div>;
+  return (
+    <Link href={rowHref(r)} className={className} {...rest}>
+      {children}
+    </Link>
+  );
+}
+
 function RowBadge({ r, className }: { r: RepRow; className?: string }) {
+  if (r.repId === UNASSIGNED_REP_ID)
+    return <Pill className={className}>No rep in Granot</Pill>;
   if (r.repId === UNMATCHED_REP_ID)
     return (
       <Pill tone="warning" className={className}>
@@ -142,9 +165,9 @@ export function RepsTable({ rows }: { rows: RepRow[] }) {
         </div>
         <div className="space-y-3">
           {sorted.map((r, i) => (
-            <Link
+            <RowLink
               key={r.repId}
-              href={rowHref(r)}
+              r={r}
               className="block rounded-xl border bg-card p-4"
             >
               <div className="flex items-center gap-3">
@@ -156,7 +179,9 @@ export function RepsTable({ rows }: { rows: RepRow[] }) {
                   <p className="truncate font-semibold">{r.repName}</p>
                   <RowBadge r={r} className="mt-0.5" />
                 </div>
-                <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                {r.repId !== UNASSIGNED_REP_ID && (
+                  <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                )}
               </div>
               <div className="mt-4 grid grid-cols-3 gap-2 text-center">
                 {COLS.map((c) => (
@@ -176,7 +201,7 @@ export function RepsTable({ rows }: { rows: RepRow[] }) {
                   </div>
                 ))}
               </div>
-            </Link>
+            </RowLink>
           ))}
         </div>
       </div>
@@ -224,7 +249,7 @@ export function RepsTable({ rows }: { rows: RepRow[] }) {
                     {i + 1}
                   </td>
                   <td className="px-3 py-3">
-                    <Link href={rowHref(r)} className="flex items-center gap-3">
+                    <RowLink r={r} className="flex items-center gap-3">
                       <UserAvatar
                         name={r.repName}
                         className="h-8 w-8 text-xs"
@@ -233,7 +258,7 @@ export function RepsTable({ rows }: { rows: RepRow[] }) {
                         {r.repName}
                       </span>
                       <RowBadge r={r} />
-                    </Link>
+                    </RowLink>
                   </td>
                   {COLS.map((c) => (
                     <td
@@ -247,9 +272,11 @@ export function RepsTable({ rows }: { rows: RepRow[] }) {
                     </td>
                   ))}
                   <td className="px-3">
-                    <Link href={rowHref(r)} aria-label={`Open ${r.repName}`}>
-                      <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-primary" />
-                    </Link>
+                    {r.repId !== UNASSIGNED_REP_ID && (
+                      <Link href={rowHref(r)} aria-label={`Open ${r.repName}`}>
+                        <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-primary" />
+                      </Link>
+                    )}
                   </td>
                 </tr>
               ))}

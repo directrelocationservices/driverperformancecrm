@@ -300,6 +300,7 @@ export type Database = {
           granot_rep: string | null;
           granot_source: string | null;
           id: string;
+          import_batch: string | null;
           is_sample: boolean;
           is_test: boolean | null;
           job_value: number | null;
@@ -319,6 +320,7 @@ export type Database = {
           granot_rep?: string | null;
           granot_source?: string | null;
           id?: string;
+          import_batch?: string | null;
           is_sample?: boolean;
           is_test?: boolean | null;
           job_value?: number | null;
@@ -338,6 +340,7 @@ export type Database = {
           granot_rep?: string | null;
           granot_source?: string | null;
           id?: string;
+          import_batch?: string | null;
           is_sample?: boolean;
           is_test?: boolean | null;
           job_value?: number | null;
