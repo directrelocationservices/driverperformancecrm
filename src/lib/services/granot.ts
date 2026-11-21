@@ -70,7 +70,7 @@ async function apply(
 
   const { data: existing } = await sb
     .from("leads")
-    .select("id, rep_id, status")
+    .select("id, rep_id, status, booked_date")
     .eq("granot_id", ev.jobNumber)
     .maybeSingle();
 
@@ -120,12 +120,20 @@ async function apply(
     return { status: "error", message: "Couldn't find or create the lead" };
 
   const patch: LeadUpdate = { raw };
-  if (repId && !existing?.rep_id) patch.rep_id = repId;
-  if (ev.rep) patch.granot_rep = ev.rep;
+  // The rep in the latest Granot event wins, so reassignments in Granot
+  // move the lead (an unknown name leaves it "Unmatched" until linked)
+  if (ev.rep) {
+    patch.granot_rep = ev.rep;
+    patch.rep_id = repId;
+  }
 
   if (ev.type === "booked") {
     patch.status = "booked";
-    patch.booked_date = ev.bookedDate ?? todayET();
+    // Granot re-sends "Booked" when an estimate changes: keep the first booking date
+    const alreadyBooked =
+      existing?.status === "booked" && !!existing.booked_date;
+    patch.booked_date =
+      ev.bookedDate ?? (alreadyBooked ? existing!.booked_date : todayET());
     if (ev.totalEstimate !== null) patch.job_value = ev.totalEstimate;
     else notes.push("No total estimate in the event");
     notes.push("Marked booked");
@@ -139,9 +147,6 @@ async function apply(
   } else if (existing) {
     notes.push("Lead already existed");
   }
-
-  // A booking for a rep who changed in Granot: the booking rep wins
-  if (ev.type === "booked" && repId) patch.rep_id = repId;
 
   const { error } = await sb.from("leads").update(patch).eq("id", leadId);
   if (error) throw error;
