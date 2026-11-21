@@ -1,3 +1,6 @@
+// File: src/app/(admin)/admin/sales/lead-costs/page.tsx
+// (REPLACE the whole file)
+
 import Link from "next/link";
 import { parseISO } from "date-fns";
 import {
@@ -11,6 +14,7 @@ import {
   Users,
 } from "lucide-react";
 import {
+  getCostRanges,
   countLeadsBySource,
   getEffectiveCosts,
   getLeadCosts,
@@ -18,7 +22,8 @@ import {
   getLeads,
 } from "@/lib/data";
 import { requireRole } from "@/lib/auth/session";
-import { formatCurrency } from "@/lib/format";
+import { formatCurrency, formatDate } from "@/lib/format";
+import { CostRangeDialog } from "@/components/sales/cost-range-dialog";
 import { resolveWeek, shiftWeek, weekLabel } from "@/lib/weeks";
 import { PageHeader } from "@/components/shared/page-header";
 import { LeadCostsForm } from "@/components/sales/lead-costs-form";
@@ -57,7 +62,7 @@ export default async function LeadCostsPage({
   const nextWeek = shiftWeek(week, 1);
   const weekEnd = shiftWeek(week, 1);
 
-  const [sources, costs, effective, previous, counts, leads] =
+  const [sources, costs, effective, previous, counts, leads, ranges] =
     await Promise.all([
       getLeadSources(false),
       getLeadCosts(week),
@@ -65,7 +70,14 @@ export default async function LeadCostsPage({
       getEffectiveCosts(prevWeek),
       countLeadsBySource(week),
       getLeads(),
+      getCostRanges(),
     ]);
+  // Date-range costs that cover any day of this week replace its weekly cost
+  const weekLast = shiftWeek(week, 1);
+  const covering = ranges.filter(
+    (r) => r.startDate < weekLast && r.endDate >= week,
+  );
+  const sourceName = Object.fromEntries(sources.map((s) => [s.id, s.name]));
 
   const weekLeads = leads.filter(
     (l) => l.date >= week && parseISO(l.date) < parseISO(weekEnd),
@@ -90,6 +102,9 @@ export default async function LeadCostsPage({
         description="Set how much each lead source costs per week (Monday to Sunday)."
         actions={
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+            <CostRangeDialog
+              sources={sources.map((s) => ({ id: s.id, name: s.name }))}
+            />
             <Link
               href="/admin/sales/lead-costs/history"
               className="flex h-11 items-center justify-center gap-2 rounded-lg border bg-white px-4 text-sm font-semibold hover:border-foreground/30"
@@ -118,6 +133,29 @@ export default async function LeadCostsPage({
           </div>
         }
       />
+
+      {covering.length > 0 && (
+        <div className="mb-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <p className="font-semibold">
+            Date-range costs apply in this week (they replace the weekly cost):
+          </p>
+          <ul className="mt-1 list-disc pl-5">
+            {covering.map((r) => (
+              <li key={r.id}>
+                {sourceName[r.sourceId] ?? "Source"}:{" "}
+                {formatCurrency(r.costPerLead)} per lead (
+                {formatDate(r.startDate)} – {formatDate(r.endDate)})
+              </li>
+            ))}
+          </ul>
+          <Link
+            href="/admin/sales/lead-costs/history"
+            className="mt-1 inline-block font-semibold underline"
+          >
+            See or edit in Cost history
+          </Link>
+        </div>
+      )}
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
         <LeadCostsForm
@@ -175,6 +213,10 @@ export default async function LeadCostsPage({
               <li>
                 If a week has no cost, last week&apos;s cost is used until you
                 update it.
+              </li>
+              <li>
+                A date-range cost (cost per lead, or total spend divided across
+                the leads) is used instead of the weekly cost inside its dates.
               </li>
             </ul>
           </div>

@@ -1,5 +1,5 @@
 // File: src/lib/services/granot.ts
-// (NEW file)
+// (REPLACE the whole file)
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { parseGranot, todayET, type GranotEvent } from "@/lib/granot/parse";
@@ -21,20 +21,30 @@ async function findSource(sb: Admin, name: string | null) {
   return { id: other?.id ?? null, matched: false };
 }
 
-/** Sales rep by their Granot name, portal name or email (case-insensitive) */
+/**
+ * Portal user for a Granot rep name (case-insensitive): a sales rep by
+ * Granot name, portal name or email, or an admin by Granot name only
+ * (admins' leads count in company totals but not in the rep comparison).
+ */
 async function findRep(sb: Admin, rep: string | null) {
   if (!rep) return null;
   const { data } = await sb
     .from("profiles")
     .select("id, name, email, granot_name, role")
-    .eq("role", "sales_rep");
+    .in("role", ["sales_rep", "admin"]);
   const key = lc(rep);
-  const hit = (data ?? []).find(
-    (p) =>
-      (p.granot_name && lc(p.granot_name) === key) ||
-      lc(p.name ?? "") === key ||
-      lc(p.email ?? "") === key,
-  );
+  const list = data ?? [];
+  const hit =
+    list.find(
+      (p) =>
+        p.role === "sales_rep" &&
+        ((p.granot_name && lc(p.granot_name) === key) ||
+          lc(p.name ?? "") === key ||
+          lc(p.email ?? "") === key),
+    ) ??
+    list.find(
+      (p) => p.role === "admin" && p.granot_name && lc(p.granot_name) === key,
+    );
   return hit?.id ?? null;
 }
 

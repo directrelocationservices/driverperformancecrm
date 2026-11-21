@@ -491,6 +491,124 @@ export type Database = {
           },
         ];
       };
+      lead_cost_range_log: {
+        Row: {
+          action: string;
+          after: Json | null;
+          before: Json | null;
+          changed_at: string;
+          changed_by: string | null;
+          id: string;
+          range_id: string;
+          source_id: string;
+        };
+        Insert: {
+          action: string;
+          after?: Json | null;
+          before?: Json | null;
+          changed_at?: string;
+          changed_by?: string | null;
+          id?: string;
+          range_id: string;
+          source_id: string;
+        };
+        Update: {
+          action?: string;
+          after?: Json | null;
+          before?: Json | null;
+          changed_at?: string;
+          changed_by?: string | null;
+          id?: string;
+          range_id?: string;
+          source_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "lead_cost_range_log_changed_by_fkey";
+            columns: ["changed_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "lead_cost_range_log_source_id_fkey";
+            columns: ["source_id"];
+            isOneToOne: false;
+            referencedRelation: "lead_sources";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      lead_cost_ranges: {
+        Row: {
+          amount: number;
+          cost_per_lead: number;
+          created_at: string;
+          created_by: string | null;
+          end_date: string;
+          id: string;
+          lead_count: number;
+          mode: string;
+          note: string | null;
+          source_id: string;
+          start_date: string;
+          updated_at: string;
+          updated_by: string | null;
+        };
+        Insert: {
+          amount: number;
+          cost_per_lead?: number;
+          created_at?: string;
+          created_by?: string | null;
+          end_date: string;
+          id?: string;
+          lead_count?: number;
+          mode: string;
+          note?: string | null;
+          source_id: string;
+          start_date: string;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Update: {
+          amount?: number;
+          cost_per_lead?: number;
+          created_at?: string;
+          created_by?: string | null;
+          end_date?: string;
+          id?: string;
+          lead_count?: number;
+          mode?: string;
+          note?: string | null;
+          source_id?: string;
+          start_date?: string;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "lead_cost_ranges_created_by_fkey";
+            columns: ["created_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "lead_cost_ranges_source_id_fkey";
+            columns: ["source_id"];
+            isOneToOne: false;
+            referencedRelation: "lead_sources";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "lead_cost_ranges_updated_by_fkey";
+            columns: ["updated_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       lead_costs: {
         Row: {
           cost: number;
@@ -1342,8 +1460,21 @@ export type Database = {
         };
         Returns: string;
       };
+      admin_delete_cost_range: { Args: { p_id: string }; Returns: undefined };
       admin_override_lead_cost: {
         Args: { p_cost: number; p_lead: string };
+        Returns: string;
+      };
+      admin_save_cost_range: {
+        Args: {
+          p_amount: number;
+          p_end: string;
+          p_id: string;
+          p_mode: string;
+          p_note: string;
+          p_source: string;
+          p_start: string;
+        };
         Returns: string;
       };
       admin_seed_sample_leads: { Args: never; Returns: number };
@@ -1375,6 +1506,7 @@ export type Database = {
       new_deleted_is_null: { Args: { p: Json }; Returns: boolean };
       owns_job: { Args: { p_job: string }; Returns: boolean };
       recalc_lead_costs: { Args: { p_source: string }; Returns: number };
+      refresh_cost_range: { Args: { p_id: string }; Returns: undefined };
       seed_sample_leads_internal: { Args: never; Returns: number };
       truck_responsible_driver: { Args: { p_truck: string }; Returns: string };
     };

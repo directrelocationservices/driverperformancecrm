@@ -1,3 +1,6 @@
+// File: src/app/(admin)/admin/sales/reps/[id]/page.tsx
+// (REPLACE the whole file)
+
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Mail } from "lucide-react";
@@ -28,7 +31,8 @@ export default async function AdminRepProfile({
   await requireRole("admin");
   const { id } = await params;
   const rep = await getUserById(id);
-  if (!rep || rep.role !== "sales_rep") notFound();
+  // Admins with a Granot name have their own leads page too
+  if (!rep || (rep.role !== "sales_rep" && rep.role !== "admin")) notFound();
 
   const sp = await searchParams;
   const { range, label } = resolveFilters(sp);
@@ -47,7 +51,7 @@ export default async function AdminRepProfile({
         href="/admin/sales"
         className="mb-4 inline-flex items-center gap-1.5 text-sm font-semibold text-muted-foreground hover:text-foreground"
       >
-        <ArrowLeft className="h-4 w-4" /> All reps
+        <ArrowLeft className="h-4 w-4" /> Sales reps
       </Link>
 
       <div className="mb-6 flex flex-col gap-4 rounded-2xl border bg-card p-5 sm:flex-row sm:items-center sm:p-6">

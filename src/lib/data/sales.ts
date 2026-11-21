@@ -10,8 +10,11 @@ import {
 } from "date-fns";
 import { createClient } from "@/lib/supabase/server";
 import { shiftWeek, weekStartOf } from "@/lib/weeks";
-import { getReps, getUserById } from "./users";
+import { getAdmins, getReps, getUserById } from "./users";
 import type {
+  CostRange,
+  CostRangeChange,
+  CostRangeMode,
   DateRange,
   Lead,
   LeadCost,
@@ -231,14 +234,30 @@ export async function getRepMetrics(
 export async function getAllRepMetrics(
   opts: { range?: DateRange; sourceId?: string } = {},
 ) {
-  const [reps, leads] = await Promise.all([getReps(true), getLeads(opts)]);
+  const [reps, admins, leads] = await Promise.all([
+    getReps(true),
+    getAdmins(true),
+    getLeads(opts),
+  ]);
   const rows: RepMetrics[] = reps.map((r) => ({
     repId: r.id,
     repName: r.name,
     ...summarizeLeads(leads.filter((l) => l.repId === r.id)),
   }));
+  // Admins' own Granot leads: counted in company totals under their name,
+  // but kept out of the rep comparison (kind "admin")
+  for (const a of admins) {
+    const mine = leads.filter((l) => l.repId === a.id);
+    if (mine.length)
+      rows.push({
+        repId: a.id,
+        repName: a.name,
+        kind: "admin",
+        ...summarizeLeads(mine),
+      });
+  }
   // Leads with no sales rep in Granot at all: still counted, shown as "Unassigned"
-  const known = new Set(reps.map((r) => r.id));
+  const known = new Set([...reps, ...admins].map((r) => r.id));
   const unassigned = leads.filter(
     (l) => !l.repId && !(l.granotRep ?? "").trim(),
   );
@@ -494,23 +513,26 @@ export async function getGranotEvents(limit = 100): Promise<GranotEventRow[]> {
     leadId: e.lead_id,
   }));
 }
-/** Active sales reps with their Granot username */
+/** Active sales reps and admins with their Granot username (reps first) */
 export async function getRepGranotNames(): Promise<
-  { id: string; name: string; granotName: string }[]
+  { id: string; name: string; granotName: string; isAdmin: boolean }[]
 > {
   const sb = await createClient();
   const { data, error } = await sb
     .from("profiles")
-    .select("id, name, granot_name")
-    .eq("role", "sales_rep")
+    .select("id, name, granot_name, role")
+    .in("role", ["sales_rep", "admin"])
     .eq("active", true)
     .order("name");
   if (error) throw error;
-  return (data ?? []).map((p) => ({
-    id: p.id,
-    name: p.name,
-    granotName: p.granot_name ?? "",
-  }));
+  return (data ?? [])
+    .map((p) => ({
+      id: p.id,
+      name: p.name,
+      granotName: p.granot_name ?? "",
+      isAdmin: p.role === "admin",
+    }))
+    .sort((a, b) => Number(a.isAdmin) - Number(b.isAdmin));
 }
 
 /** Granot usernames on leads that aren't linked to a portal rep yet */
@@ -536,4 +558,83 @@ export async function getUnmatchedGranotReps(): Promise<
   return Array.from(counts, ([username, leads]) => ({ username, leads })).sort(
     (a, b) => b.leads - a.leads,
   );
+}
+
+/* =========================================================
+   Lead costs for a date range (cost per lead, or total spend
+   divided across the source's leads in the range)
+   ========================================================= */
+export async function getCostRanges(): Promise<CostRange[]> {
+  const sb = await createClient();
+  const { data, error } = await sb
+    .from("lead_cost_ranges")
+    .select("*")
+    .order("start_date", { ascending: false });
+  if (error) throw error;
+  return (data ?? []).map((r) => ({
+    id: r.id,
+    sourceId: r.source_id,
+    startDate: r.start_date,
+    endDate: r.end_date,
+    mode: r.mode as CostRangeMode,
+    amount: Number(r.amount),
+    costPerLead: Number(r.cost_per_lead),
+    leadCount: r.lead_count,
+    note: r.note,
+    updatedBy: r.updated_by,
+    updatedAt: r.updated_at,
+  }));
+}
+
+export async function getCostRangeChanges(
+  limit = 50,
+): Promise<CostRangeChange[]> {
+  const sb = await createClient();
+  const { data, error } = await sb
+    .from("lead_cost_range_log")
+    .select("*")
+    .order("changed_at", { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return (data ?? []).map((c) => ({
+    id: c.id,
+    rangeId: c.range_id,
+    sourceId: c.source_id,
+    action: c.action as CostRangeChange["action"],
+    before: c.before as CostRangeChange["before"],
+    after: c.after as CostRangeChange["after"],
+    changedBy: c.changed_by,
+    changedAt: c.changed_at,
+  }));
+}
+
+/** Creates (no id) or edits a date-range cost. Returns its id. */
+export async function saveCostRange(input: {
+  id?: string;
+  sourceId: string;
+  startDate: string;
+  endDate: string;
+  mode: CostRangeMode;
+  amount: number;
+  note?: string;
+}): Promise<string> {
+  const sb = await createClient();
+  const { data, error } = await sb.rpc("admin_save_cost_range", {
+    // null = new range (the database function accepts it; generated types say string)
+    p_id: (input.id ?? null) as unknown as string,
+    p_source: input.sourceId,
+    p_start: input.startDate,
+    p_end: input.endDate,
+    p_mode: input.mode,
+    p_amount: input.amount,
+    p_note: input.note ?? "",
+  });
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteCostRange(id: string) {
+  const sb = await createClient();
+  const { error } = await sb.rpc("admin_delete_cost_range", { p_id: id });
+  if (error) throw error;
 }

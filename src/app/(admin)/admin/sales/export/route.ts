@@ -1,3 +1,6 @@
+// File: src/app/(admin)/admin/sales/export/route.ts
+// (REPLACE the whole file)
+
 import { NextResponse, type NextRequest } from "next/server";
 import { format } from "date-fns";
 import { getSession } from "@/lib/auth/session";
@@ -30,7 +33,7 @@ export async function GET(req: NextRequest) {
       "Revenue booked",
     ],
     rows.map((r) => [
-      r.repName,
+      r.kind === "admin" ? `${r.repName} (admin)` : r.repName,
       r.leads,
       r.booked,
       r2(r.closingRatio * 100),

@@ -111,12 +111,14 @@ export default async function GranotSyncPage() {
       <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="rounded-2xl border bg-card p-5">
           <h2 className="flex items-center gap-2 text-lg font-bold">
-            <UserRound className="h-5 w-5 text-primary" /> Sales reps in Granot
+            <UserRound className="h-5 w-5 text-primary" /> Reps and admins in
+            Granot
           </h2>
           <p className="mb-2 mt-1 text-sm text-muted-foreground">
             Granot sends the rep&apos;s <b>Granot username</b>. Enter each
             rep&apos;s username so their leads are linked to them. Saving also
-            links their earlier unassigned leads.
+            links their earlier unassigned leads. Admins&apos; leads count in
+            the company totals but not in the rep comparison.
           </p>
           <GranotRepMap reps={reps} />
         </div>

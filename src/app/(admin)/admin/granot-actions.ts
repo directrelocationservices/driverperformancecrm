@@ -25,7 +25,9 @@ export async function saveGranotNameAction(
     .select("id, role")
     .eq("id", userId)
     .maybeSingle();
-  if (!rep || rep.role !== "sales_rep") return { error: "Choose a sales rep." };
+  // Admins can have a Granot name too (their leads stay out of the rep comparison)
+  if (!rep || (rep.role !== "sales_rep" && rep.role !== "admin"))
+    return { error: "Choose a sales rep or an admin." };
 
   if (name) {
     const { data: taken } = await sb

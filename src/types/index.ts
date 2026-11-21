@@ -153,6 +153,8 @@ export const UNASSIGNED_REP_ID = "unassigned";
 export interface RepMetrics {
   repId: string;
   repName: string;
+  /** "admin": an admin's own Granot leads (in totals, not in the rep comparison) */
+  kind?: "admin";
   leads: number;
   booked: number;
   closingRatio: number;
@@ -591,4 +593,49 @@ export interface CarrierScore {
   /** What the damage cost DRS: paid to customers minus charged back */
   netCost: number;
   openClaims: number;
+}
+
+/* ---------- Lead costs for a date range ---------- */
+export type CostRangeMode = "per_lead" | "total";
+
+export interface CostRange {
+  id: string;
+  sourceId: string;
+  /** YYYY-MM-DD */
+  startDate: string;
+  endDate: string;
+  mode: CostRangeMode;
+  /** Cost per lead (per_lead) or total spend (total) */
+  amount: number;
+  /** What each lead in the range costs */
+  costPerLead: number;
+  leadCount: number;
+  note: string | null;
+  updatedBy: string | null;
+  updatedAt: string;
+}
+
+export interface CostRangeChange {
+  id: string;
+  rangeId: string;
+  sourceId: string;
+  action: "create" | "update" | "delete";
+  before: Partial<{
+    start_date: string;
+    end_date: string;
+    mode: CostRangeMode;
+    amount: number;
+    source_id: string;
+  }> | null;
+  after: Partial<{
+    start_date: string;
+    end_date: string;
+    mode: CostRangeMode;
+    amount: number;
+    source_id: string;
+    lead_count: number;
+    cost_per_lead: number;
+  }> | null;
+  changedBy: string | null;
+  changedAt: string;
 }

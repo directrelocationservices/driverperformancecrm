@@ -72,6 +72,9 @@ export const getDrivers = (includeInactive = false) =>
 export const getReps = (includeInactive = false) =>
   getByRole("sales_rep", includeInactive);
 
+export const getAdmins = (includeInactive = false) =>
+  getByRole("admin", includeInactive);
+
 export async function emailExists(
   email: string,
   excludeId?: string,

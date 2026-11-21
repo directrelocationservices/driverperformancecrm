@@ -1,8 +1,11 @@
 // File: src/app/(admin)/admin/sales/page.tsx
 // (REPLACE the whole file)
 
+import Link from "next/link";
 import {
   BadgePercent,
+  ChevronRight,
+  ShieldCheck,
   DollarSign,
   Download,
   Receipt,
@@ -53,10 +56,14 @@ export default async function AdminSalesPage({
   ]);
 
   const active = Object.fromEntries(reps.map((r) => [r.id, r.active]));
-  const rows: RepRow[] = metrics.map((m) => ({
-    ...m,
-    active: active[m.repId] ?? true, // "Unmatched" row isn't a person
-  }));
+  // Admins' own leads: in the totals, listed by name, not in the rep comparison
+  const adminRows = metrics.filter((m) => m.kind === "admin");
+  const rows: RepRow[] = metrics
+    .filter((m) => m.kind !== "admin")
+    .map((m) => ({
+      ...m,
+      active: active[m.repId] ?? true, // "Unmatched" row isn't a person
+    }));
   const t = repTotals(metrics);
   const exportQuery = `${filtersToQuery(sp)}${sourceId ? `&source=${sourceId}` : ""}`;
 
@@ -123,6 +130,39 @@ export default async function AdminSalesPage({
           <h2 className="mb-3 text-lg font-bold sm:text-xl">Rep comparison</h2>
           <RepsTable rows={rows} />
         </section>
+
+        {adminRows.length > 0 && (
+          <section>
+            <h2 className="mb-1 flex items-center gap-2 text-lg font-bold sm:text-xl">
+              <ShieldCheck className="h-5 w-5 text-primary" /> Admin leads
+            </h2>
+            <p className="mb-3 text-sm text-muted-foreground">
+              Leads worked by admins in Granot. They count in the company and
+              lead source totals, but not in the rep comparison.
+            </p>
+            <div className="divide-y rounded-xl border bg-card">
+              {adminRows.map((r) => (
+                <Link
+                  key={r.repId}
+                  href={`/admin/sales/reps/${r.repId}`}
+                  className="group flex flex-wrap items-center gap-x-6 gap-y-1 px-4 py-3 hover:bg-muted/40 sm:px-5"
+                >
+                  <span className="min-w-[160px] flex-1 font-semibold">
+                    {r.repName}
+                  </span>
+                  <span className="text-sm text-muted-foreground">
+                    {r.leads} leads · {r.booked} booked ·{" "}
+                    {formatPercent(r.closingRatio)} ·{" "}
+                    <span className="font-semibold text-foreground">
+                      {formatCurrency(r.revenue)}
+                    </span>
+                  </span>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-primary" />
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
 
         <div className="grid grid-cols-1 gap-6 2xl:grid-cols-2">
           <SourceBreakdown rows={breakdown} title="Company by lead source" />
