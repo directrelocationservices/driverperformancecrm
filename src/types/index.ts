@@ -33,6 +33,11 @@ export interface Job {
   createdAt: string;
   /** Carrier that delivered a "Partner" job */
   carrierId?: string | null;
+  customerName?: string | null;
+  /** YYYY-MM-DD */
+  deliveryDate?: string | null;
+  /** Admin who logged the job for the driver (null = the driver did) */
+  enteredBy?: string | null;
 }
 
 export interface PreDamage {
@@ -46,13 +51,30 @@ export interface PreDamage {
   customerName: string;
   signatureUrl: string | null;
   notes?: string;
-  capturedAtDevice: string;
+  /** Null for office-entered records (no device on site) */
+  capturedAtDevice: string | null;
   receivedAtServer: string;
   syncedOffline: boolean;
   lat: number | null;
   lng: number | null;
   locked: boolean;
   deletedAt?: string | null;
+  /** Photos the office uploaded later (not captured on site) */
+  officeEntered?: boolean;
+  createdBy?: string | null;
+}
+
+/** Photos / signed paperwork uploaded to a job after the fact */
+export type JobDocumentKind = "photo" | "paperwork" | "other";
+export interface JobDocument {
+  id: string;
+  kind: JobDocumentKind;
+  name: string;
+  url: string;
+  isPdf: boolean;
+  uploadedBy: string | null;
+  createdAt: string;
+  deletedAt: string | null;
 }
 
 export type DamageSource =
@@ -125,6 +147,7 @@ export interface JobDetail extends Job {
   damages: DamageIncident[];
   reviews: Review[];
   upsells: Upsell[];
+  documents?: JobDocument[];
 }
 
 export interface DriverMetrics {
@@ -208,7 +231,7 @@ export interface MonthlyPoint {
 }
 
 export type RecordKind = "pre_damage" | "damage" | "review" | "upsell";
-export type EntityType = RecordKind | "job" | "carrier_claim";
+export type EntityType = RecordKind | "job" | "carrier_claim" | "document";
 export type AuditAction =
   "create" | "update" | "delete" | "restore" | "verify" | "unverify";
 
@@ -639,3 +662,20 @@ export interface CostRangeChange {
   changedBy: string | null;
   changedAt: string;
 }
+
+/* ---------- Sales leaderboard ---------- */
+export interface SalesSettings {
+  /** Leads a rep needs before ranking on Close % */
+  leaderboardMinLeads: number;
+  /** Sales reps can see the leaderboard from their own login */
+  repsSeeLeaderboard: boolean;
+}
+
+/**
+ * How sales numbers are counted:
+ *  "granot" (default): like Granot's Salesmen Performance report. Leads = Total In
+ *    (leads that came in during the period), Booked = those leads now booked,
+ *    Close % = Booked ÷ Total In, Revenue = jobs booked in the period (by booking date).
+ *  "lead": everything by lead date (for lead source and CPA analysis).
+ */
+export type SalesView = "granot" | "lead";

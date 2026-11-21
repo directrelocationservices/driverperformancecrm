@@ -1,3 +1,6 @@
+// File: src/app/(driver)/driver/jobs/[id]/page.tsx
+// (REPLACE the whole file)
+
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
@@ -260,10 +263,14 @@ export default async function DriverJobDetail({
                   <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                     Record
                   </p>
-                  <p className="flex items-center gap-1.5">
-                    <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-                    Captured {formatDateTime(p.capturedAtDevice)}
-                  </p>
+                  {p.capturedAtDevice ? (
+                    <p className="flex items-center gap-1.5">
+                      <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+                      Captured {formatDateTime(p.capturedAtDevice)}
+                    </p>
+                  ) : (
+                    <p className="font-medium">Added by the office</p>
+                  )}
                   <p className="flex items-center gap-1.5">
                     <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
                     Received {formatDateTime(p.receivedAtServer)}

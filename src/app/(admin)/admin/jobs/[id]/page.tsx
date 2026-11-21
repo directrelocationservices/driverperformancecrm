@@ -16,11 +16,13 @@ import {
   Eye,
   EyeOff,
   FileDown,
+  FileText,
   History,
   Lock,
   MapPin,
   MessageSquare,
   Package,
+  Pencil,
   Plus,
   Star,
   User as UserIcon,
@@ -51,6 +53,7 @@ import { PreDamageCorrection } from "@/components/admin/pre-damage-correction";
 import { DamageCorrection } from "@/components/admin/damage-correction";
 import { DamageNoteForm } from "@/components/admin/damage-note-form";
 import { JobStatusForm } from "@/components/admin/job-status-form";
+import { JobDocuments } from "@/components/admin/job-documents";
 import {
   DAMAGE_SOURCE_LABELS,
   REVIEW_PLATFORM_LABELS,
@@ -65,12 +68,15 @@ function Section({
   count,
   action,
   children,
+  alwaysShow,
 }: {
   title: string;
   icon: React.ElementType;
   count: number;
   action?: React.ReactNode;
   children: React.ReactNode;
+  /** Show the children even when the count is 0 */
+  alwaysShow?: boolean;
 }) {
   return (
     <section className="rounded-2xl border bg-card">
@@ -83,7 +89,7 @@ function Section({
         {action && <div className="ml-auto">{action}</div>}
       </div>
       <div className="p-4 sm:p-5">
-        {count === 0 ? (
+        {count === 0 && !alwaysShow ? (
           <p className="py-3 text-center text-sm text-muted-foreground">
             Nothing recorded.
           </p>
@@ -203,6 +209,9 @@ export default async function AdminJobDetail({
   const historyFor = (entityId: string) =>
     audit.filter((a) => a.entityId === entityId);
   const activePreDamage = job.preDamages.filter((p) => !p.deletedAt).length;
+  const documents = job.documents ?? [];
+  const jobHistory = historyFor(job.id);
+  const addedBy = jobHistory.find((h) => h.action === "create");
 
   return (
     <div className="space-y-5 sm:space-y-6">
@@ -236,9 +245,17 @@ export default async function AdminJobDetail({
         <div className="h-1 bg-primary" />
         <div className="flex flex-col gap-5 p-5 sm:p-6 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/50">
-              Job number
-            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/50">
+                Job number
+              </p>
+              {job.enteredBy && (
+                <span className="rounded-full bg-sky-400/20 px-2.5 py-0.5 text-xs font-semibold text-sky-200">
+                  Entered by {names[job.enteredBy] ?? "office"}
+                  {addedBy && ` · ${formatDateTimeET(addedBy.changedAt)}`}
+                </span>
+              )}
+            </div>
             <h1 className="mt-1 text-[28px] font-bold leading-none sm:text-4xl">
               {job.jobNumber}
             </h1>
@@ -262,26 +279,57 @@ export default async function AdminJobDetail({
                 <span className="truncate">{crew}</span>
               </p>
             </div>
+            {(job.customerName || job.deliveryDate) && (
+              <div className="mt-2 grid gap-2 text-sm text-white/70 sm:grid-cols-3 sm:gap-6">
+                {job.customerName && (
+                  <p className="flex items-center gap-2">
+                    <UserIcon className="h-4 w-4" /> Customer:{" "}
+                    {job.customerName}
+                  </p>
+                )}
+                {job.deliveryDate && (
+                  <p className="flex items-center gap-2">
+                    <Calendar className="h-4 w-4" /> Delivery:{" "}
+                    {formatDate(job.deliveryDate)}
+                  </p>
+                )}
+              </div>
+            )}
           </div>
 
-          {activePreDamage > 0 ? (
-            <a
-              href={`/admin/jobs/${job.id}/pdf`}
-              target="_blank"
-              rel="noreferrer"
-              className="flex h-12 shrink-0 items-center justify-center gap-2 rounded-lg bg-primary px-5 font-semibold text-white shadow-lg shadow-primary/30 transition hover:bg-primary/90"
+          <div className="flex shrink-0 flex-col gap-2 sm:flex-row lg:flex-col">
+            <Link
+              href={`/admin/jobs/${job.id}/edit`}
+              className="flex h-12 shrink-0 items-center justify-center gap-2 rounded-lg bg-white/10 px-5 font-semibold text-white transition hover:bg-white/20"
             >
-              <FileDown className="h-5 w-5" /> Claims PDF
-            </a>
-          ) : (
-            <span className="flex h-12 shrink-0 items-center justify-center gap-2 rounded-lg bg-white/10 px-5 text-sm font-semibold text-white/50">
-              <FileDown className="h-5 w-5" /> No pre-damage to export
-            </span>
-          )}
+              <Pencil className="h-4 w-4" /> Edit job
+            </Link>
+
+            {activePreDamage > 0 ? (
+              <a
+                href={`/admin/jobs/${job.id}/pdf`}
+                target="_blank"
+                rel="noreferrer"
+                className="flex h-12 shrink-0 items-center justify-center gap-2 rounded-lg bg-primary px-5 font-semibold text-white shadow-lg shadow-primary/30 transition hover:bg-primary/90"
+              >
+                <FileDown className="h-5 w-5" /> Claims PDF
+              </a>
+            ) : (
+              <span className="flex h-12 shrink-0 items-center justify-center gap-2 rounded-lg bg-white/10 px-5 text-sm font-semibold text-white/50">
+                <FileDown className="h-5 w-5" /> No pre-damage to export
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
       <JobStatusForm job={job} carriers={carrierOptions} />
+
+      {jobHistory.length > 0 && (
+        <div className="-mt-2">
+          <HistoryList entries={jobHistory} names={names} />
+        </div>
+      )}
 
       {job.deliveredBy === "partner" && (
         <Section
@@ -322,6 +370,14 @@ export default async function AdminJobDetail({
         title="Pre-existing damage"
         icon={Camera}
         count={job.preDamages.length}
+        action={
+          <Link
+            href={`/admin/jobs/${job.id}/pre-damage/new`}
+            className="flex h-9 items-center gap-1.5 rounded-lg border bg-white px-3 text-sm font-semibold transition hover:border-foreground/30"
+          >
+            <Plus className="h-4 w-4" /> Add
+          </Link>
+        }
       >
         <div className="space-y-4">
           {job.preDamages.map((p) => {
@@ -346,6 +402,9 @@ export default async function AdminJobDetail({
                     <Pill tone="dark">
                       <Lock className="h-3 w-3" /> Locked
                     </Pill>
+                    {p.officeEntered && (
+                      <Pill tone="primary">Entered by office</Pill>
+                    )}
                     {corrected && <Pill tone="primary">Corrected</Pill>}
                     {p.syncedOffline && (
                       <Pill tone="warning">
@@ -395,15 +454,34 @@ export default async function AdminJobDetail({
                     <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                       Record
                     </p>
-                    <p className="flex items-center gap-1.5">
-                      <Clock className="h-3.5 w-3.5 text-muted-foreground" />{" "}
-                      Device: {formatDateTimeET(p.capturedAtDevice)}
-                    </p>
-                    <p className="flex items-center gap-1.5">
-                      <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />{" "}
-                      Server: {formatDateTimeET(p.receivedAtServer)}
-                    </p>
-                    {p.lat !== null && p.lng !== null ? (
+                    {p.officeEntered || !p.capturedAtDevice ? (
+                      <>
+                        <p className="flex items-center gap-1.5">
+                          <UserIcon className="h-3.5 w-3.5 text-muted-foreground" />{" "}
+                          Entered by {names[p.createdBy ?? ""] ?? "office"}
+                        </p>
+                        <p className="flex items-center gap-1.5">
+                          <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />{" "}
+                          {formatDateTimeET(p.receivedAtServer)}
+                        </p>
+                        <p className="text-muted-foreground">
+                          Not captured on site: no device time or GPS
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="flex items-center gap-1.5">
+                          <Clock className="h-3.5 w-3.5 text-muted-foreground" />{" "}
+                          Device: {formatDateTimeET(p.capturedAtDevice)}
+                        </p>
+                        <p className="flex items-center gap-1.5">
+                          <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />{" "}
+                          Server: {formatDateTimeET(p.receivedAtServer)}
+                        </p>
+                      </>
+                    )}
+                    {p.officeEntered ? null : p.lat !== null &&
+                      p.lng !== null ? (
                       <a
                         href={`https://www.google.com/maps?q=${p.lat},${p.lng}`}
                         target="_blank"
@@ -435,6 +513,16 @@ export default async function AdminJobDetail({
             );
           })}
         </div>
+      </Section>
+
+      {/* Photos and signed paperwork uploaded after the fact */}
+      <Section
+        title="Documents"
+        icon={FileText}
+        count={documents.filter((d) => !d.deletedAt).length}
+        alwaysShow
+      >
+        <JobDocuments jobId={job.id} documents={documents} names={names} />
       </Section>
 
       {/* Damage incidents */}

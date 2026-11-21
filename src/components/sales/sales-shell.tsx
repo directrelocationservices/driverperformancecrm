@@ -1,14 +1,19 @@
+// File: src/components/sales/sales-shell.tsx
+// (REPLACE the whole file)
+
 "use client";
 
 import { PortalShell } from "@/components/shared/portal-shell";
-import { SALES_NAV_GROUPS } from "@/lib/nav";
+import { SALES_LEADERBOARD_NAV, SALES_NAV_GROUPS } from "@/lib/nav";
 import type { User } from "@/types";
 
 export function SalesShell({
   user,
+  showLeaderboard = false,
   children,
 }: {
   user: User;
+  showLeaderboard?: boolean;
   children: React.ReactNode;
 }) {
   return (
@@ -16,7 +21,11 @@ export function SalesShell({
       user={user}
       roleLabel="Sales Rep"
       homeHref="/sales"
-      navGroups={SALES_NAV_GROUPS}
+      navGroups={
+        showLeaderboard
+          ? [...SALES_NAV_GROUPS, SALES_LEADERBOARD_NAV]
+          : SALES_NAV_GROUPS
+      }
     >
       {children}
     </PortalShell>

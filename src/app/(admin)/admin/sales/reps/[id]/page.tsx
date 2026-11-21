@@ -5,9 +5,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Mail } from "lucide-react";
 import { requireRole } from "@/lib/auth/session";
-import { getLeadSources, getLeads, getUserById } from "@/lib/data";
+import { getLeadSources, getLeads, getUserById, toSalesView } from "@/lib/data";
 import { resolveFilters, type FilterParams } from "@/lib/periods";
 import {
+  SALES_VIEW_NOTE,
+  SALES_VIEW_OPTIONS,
   STATUS_OPTIONS,
   resolveSourceId,
   resolveStatus,
@@ -26,7 +28,9 @@ export default async function AdminRepProfile({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<FilterParams & { source?: string; status?: string }>;
+  searchParams: Promise<
+    FilterParams & { source?: string; status?: string; view?: string }
+  >;
 }) {
   await requireRole("admin");
   const { id } = await params;
@@ -38,6 +42,7 @@ export default async function AdminRepProfile({
   const { range, label } = resolveFilters(sp);
   const sources = await getLeadSources(true);
   const sourceId = resolveSourceId(sp.source, sources);
+  const view = toSalesView(sp.view);
   const leads = await getLeads({
     repId: id,
     range,
@@ -82,11 +87,23 @@ export default async function AdminRepProfile({
         label="Source"
         className="-mt-2 mb-6"
       />
-      <p className="-mt-3 mb-5 text-sm text-muted-foreground">
-        Showing {label}
+      <ParamPills
+        param="view"
+        options={SALES_VIEW_OPTIONS}
+        allLabel="Granot report"
+        label="Count"
+        className="-mt-3 mb-1"
+      />
+      <p className="mb-5 text-xs text-muted-foreground">
+        Showing {label} · {SALES_VIEW_NOTE[view]}
       </p>
 
-      <RepPerformance repId={id} range={range} sourceId={sourceId} />
+      <RepPerformance
+        repId={id}
+        range={range}
+        sourceId={sourceId}
+        view={view}
+      />
 
       <section className="mt-8">
         <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">

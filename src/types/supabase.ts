@@ -425,17 +425,69 @@ export type Database = {
           },
         ];
       };
+      job_documents: {
+        Row: {
+          created_at: string;
+          deleted_at: string | null;
+          id: string;
+          job_id: string;
+          kind: string;
+          name: string;
+          path: string;
+          uploaded_by: string | null;
+        };
+        Insert: {
+          created_at?: string;
+          deleted_at?: string | null;
+          id?: string;
+          job_id: string;
+          kind: string;
+          name: string;
+          path: string;
+          uploaded_by?: string | null;
+        };
+        Update: {
+          created_at?: string;
+          deleted_at?: string | null;
+          id?: string;
+          job_id?: string;
+          kind?: string;
+          name?: string;
+          path?: string;
+          uploaded_by?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "job_documents_job_id_fkey";
+            columns: ["job_id"];
+            isOneToOne: false;
+            referencedRelation: "jobs";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "job_documents_uploaded_by_fkey";
+            columns: ["uploaded_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       jobs: {
         Row: {
           carrier_id: string | null;
           created_at: string;
           crew_ids: string[];
+          customer_name: string | null;
           date: string;
           delivered_by: Database["public"]["Enums"]["delivered_by"];
+          delivery_date: string | null;
           dest_city: string;
           dest_state: string;
           driver_id: string;
+          entered_by: string | null;
           id: string;
+          import_batch: string | null;
           job_number: string;
           on_time_delivery: boolean | null;
           on_time_pickup: boolean | null;
@@ -446,12 +498,16 @@ export type Database = {
           carrier_id?: string | null;
           created_at?: string;
           crew_ids?: string[];
+          customer_name?: string | null;
           date: string;
           delivered_by?: Database["public"]["Enums"]["delivered_by"];
+          delivery_date?: string | null;
           dest_city: string;
           dest_state: string;
           driver_id: string;
+          entered_by?: string | null;
           id?: string;
+          import_batch?: string | null;
           job_number: string;
           on_time_delivery?: boolean | null;
           on_time_pickup?: boolean | null;
@@ -462,12 +518,16 @@ export type Database = {
           carrier_id?: string | null;
           created_at?: string;
           crew_ids?: string[];
+          customer_name?: string | null;
           date?: string;
           delivered_by?: Database["public"]["Enums"]["delivered_by"];
+          delivery_date?: string | null;
           dest_city?: string;
           dest_state?: string;
           driver_id?: string;
+          entered_by?: string | null;
           id?: string;
+          import_batch?: string | null;
           job_number?: string;
           on_time_delivery?: boolean | null;
           on_time_pickup?: boolean | null;
@@ -485,6 +545,13 @@ export type Database = {
           {
             foreignKeyName: "jobs_driver_id_fkey";
             columns: ["driver_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "jobs_entered_by_fkey";
+            columns: ["entered_by"];
             isOneToOne: false;
             referencedRelation: "profiles";
             referencedColumns: ["id"];
@@ -822,7 +889,7 @@ export type Database = {
       };
       pre_damages: {
         Row: {
-          captured_at_device: string;
+          captured_at_device: string | null;
           created_by: string | null;
           customer_name: string;
           customer_shown: boolean;
@@ -836,13 +903,14 @@ export type Database = {
           location: string;
           locked: boolean;
           notes: string | null;
+          office_entered: boolean;
           photo_paths: string[];
           received_at_server: string;
-          signature_path: string;
+          signature_path: string | null;
           synced_offline: boolean;
         };
         Insert: {
-          captured_at_device: string;
+          captured_at_device?: string | null;
           created_by?: string | null;
           customer_name: string;
           customer_shown: boolean;
@@ -856,13 +924,14 @@ export type Database = {
           location: string;
           locked?: boolean;
           notes?: string | null;
+          office_entered?: boolean;
           photo_paths: string[];
           received_at_server?: string;
-          signature_path: string;
+          signature_path?: string | null;
           synced_offline?: boolean;
         };
         Update: {
-          captured_at_device?: string;
+          captured_at_device?: string | null;
           created_by?: string | null;
           customer_name?: string;
           customer_shown?: boolean;
@@ -876,9 +945,10 @@ export type Database = {
           location?: string;
           locked?: boolean;
           notes?: string | null;
+          office_entered?: boolean;
           photo_paths?: string[];
           received_at_server?: string;
-          signature_path?: string;
+          signature_path?: string | null;
           synced_offline?: boolean;
         };
         Relationships: [
@@ -1158,6 +1228,7 @@ export type Database = {
           company: Json;
           damage_alert_emails: string[];
           id: number;
+          sales: Json;
           scoring: Json;
           updated_at: string;
         };
@@ -1165,6 +1236,7 @@ export type Database = {
           company: Json;
           damage_alert_emails?: string[];
           id?: number;
+          sales?: Json;
           scoring?: Json;
           updated_at?: string;
         };
@@ -1172,6 +1244,7 @@ export type Database = {
           company?: Json;
           damage_alert_emails?: string[];
           id?: number;
+          sales?: Json;
           scoring?: Json;
           updated_at?: string;
         };

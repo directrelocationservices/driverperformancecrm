@@ -10,6 +10,7 @@ export const ENTITY_LABELS: Record<EntityType, string> = {
   review: "Review",
   upsell: "Upsell",
   carrier_claim: "Carrier claim",
+  document: "Document",
 };
 
 export const ACTION_LABELS: Record<AuditAction, string> = {
@@ -43,6 +44,14 @@ const FIELD_LABELS: Record<string, string> = {
   claim_filed: "Claim filed",
   estimated_cost: "Estimated cost",
   claim_amount: "Claim amount",
+  delivery_date: "Delivery date",
+  job_number: "Job number",
+  origin_city: "Origin city",
+  origin_state: "Origin state",
+  dest_city: "Destination city",
+  dest_state: "Destination state",
+  driver_id: "Driver",
+  crew_ids: "Crew",
   paid_amount: "Paid",
   charged_back_amount: "Charged back",
   status: "Status",
@@ -68,6 +77,11 @@ const HIDDEN = new Set([
   "deleted_at",
   "updated_at",
   "created_at",
+  "entered_by",
+  "import_batch",
+  "uploaded_by",
+  "path",
+  "office_entered",
 ]);
 
 /** File paths aren't readable; show "3 photos" / "Yes" instead */

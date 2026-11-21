@@ -15,6 +15,7 @@ import {
 import { requireRole } from "@/lib/auth/session";
 import {
   getAllRepMetrics,
+  toSalesView,
   getLeadSources,
   getRepMonthlyTrend,
   getReps,
@@ -26,7 +27,13 @@ import {
   resolveFilters,
   type FilterParams,
 } from "@/lib/periods";
-import { resolveSourceId, sourceNameMap, sourceOptions } from "@/lib/sales";
+import {
+  resolveSourceId,
+  sourceNameMap,
+  sourceOptions,
+  SALES_VIEW_NOTE,
+  SALES_VIEW_OPTIONS,
+} from "@/lib/sales";
 import { formatCurrency, formatPercent } from "@/lib/format";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatCard } from "@/components/shared/stat-card";
@@ -39,7 +46,7 @@ import { SourceBreakdown } from "@/components/sales/source-breakdown";
 export default async function AdminSalesPage({
   searchParams,
 }: {
-  searchParams: Promise<FilterParams & { source?: string }>;
+  searchParams: Promise<FilterParams & { source?: string; view?: string }>;
 }) {
   await requireRole("admin");
   const sp = await searchParams;
@@ -47,11 +54,12 @@ export default async function AdminSalesPage({
   const sources = await getLeadSources(true);
   const sourceId = resolveSourceId(sp.source, sources);
   const names = sourceNameMap(sources);
+  const view = toSalesView(sp.view);
 
   const [metrics, reps, breakdown, trend] = await Promise.all([
-    getAllRepMetrics({ range, sourceId }),
+    getAllRepMetrics({ range, sourceId, view }),
     getReps(true),
-    getSourceBreakdown({ range }),
+    getSourceBreakdown({ range, view }),
     getRepMonthlyTrend(undefined, 6),
   ]);
 
@@ -65,7 +73,7 @@ export default async function AdminSalesPage({
       active: active[m.repId] ?? true, // "Unmatched" row isn't a person
     }));
   const t = repTotals(metrics);
-  const exportQuery = `${filtersToQuery(sp)}${sourceId ? `&source=${sourceId}` : ""}`;
+  const exportQuery = `${filtersToQuery(sp)}${sourceId ? `&source=${sourceId}` : ""}${view === "lead" ? "&view=lead" : ""}`;
 
   return (
     <div>
@@ -87,15 +95,25 @@ export default async function AdminSalesPage({
         options={sourceOptions(sources)}
         allLabel="All sources"
         label="Source"
-        className="-mt-2 mb-6"
+        className="-mt-2 mb-3"
       />
+      <ParamPills
+        param="view"
+        options={SALES_VIEW_OPTIONS}
+        allLabel="Granot report"
+        label="Count"
+        className="mb-1"
+      />
+      <p className="mb-6 text-xs text-muted-foreground">
+        {SALES_VIEW_NOTE[view]}
+      </p>
 
       <div className="space-y-8">
         <section>
           <h2 className="mb-3 text-lg font-bold sm:text-xl">Company totals</h2>
           <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 2xl:grid-cols-5">
             <StatCard
-              label="Leads"
+              label={view === "granot" ? "Total In" : "Leads"}
               value={t.leads}
               hint={`${t.booked} booked`}
               icon={Users}
@@ -128,7 +146,10 @@ export default async function AdminSalesPage({
 
         <section>
           <h2 className="mb-3 text-lg font-bold sm:text-xl">Rep comparison</h2>
-          <RepsTable rows={rows} />
+          <RepsTable
+            rows={rows}
+            leadsLabel={view === "granot" ? "Total In" : "Leads"}
+          />
         </section>
 
         {adminRows.length > 0 && (

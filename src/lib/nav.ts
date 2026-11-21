@@ -131,6 +131,12 @@ export const SALES_NAV_GROUPS: NavGroup[] = [
   },
 ];
 
+/** Shown to sales reps only when an admin turns it on in Settings */
+export const SALES_LEADERBOARD_NAV: NavGroup = {
+  title: "Team",
+  items: [{ href: "/sales/leaderboard", label: "Leaderboard", icon: Trophy }],
+};
+
 export const CARRIER_NAV_GROUPS: NavGroup[] = [
   {
     title: "Claims",

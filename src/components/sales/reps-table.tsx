@@ -17,7 +17,7 @@ export type RepRow = RepMetrics & { active: boolean };
 type Key = keyof RepMetrics;
 type SortDir = "asc" | "desc";
 
-const COLS: {
+const BASE_COLS: {
   key: Key;
   label: string;
   fmt: (r: RepRow) => string;
@@ -102,7 +102,17 @@ function SortIcon({
   );
 }
 
-export function RepsTable({ rows }: { rows: RepRow[] }) {
+export function RepsTable({
+  rows,
+  leadsLabel = "Leads",
+}: {
+  rows: RepRow[];
+  /** "Total In" in the Granot view */
+  leadsLabel?: string;
+}) {
+  const COLS = BASE_COLS.map((c) =>
+    c.key === "leads" ? { ...c, label: leadsLabel } : c,
+  );
   const [sortKey, setSortKey] = useState<Key>("closingRatio");
   const [dir, setDir] = useState<SortDir>("desc");
 

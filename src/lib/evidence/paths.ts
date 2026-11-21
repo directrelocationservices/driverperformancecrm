@@ -4,11 +4,11 @@
 /** Private Supabase Storage bucket for job evidence (photos, signatures, review screenshots) */
 export const EVIDENCE_BUCKET = "evidence";
 
-export type EvidenceKind = "pre_damage" | "damage" | "review";
+export type EvidenceKind = "pre_damage" | "damage" | "review" | "document";
 
 const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
 const PATH_RE = new RegExp(
-  `^(${UUID})/(pre_damage|damage|review)/[A-Za-z0-9._-]{1,120}\\.(jpg|png)$`,
+  `^(${UUID})/(pre_damage|damage|review|document)/[A-Za-z0-9._-]{1,120}\\.(jpg|png|pdf)$`,
 );
 
 /** Storage path: <job_id>/<kind>/<file>. The job id folder is what Storage security checks. */

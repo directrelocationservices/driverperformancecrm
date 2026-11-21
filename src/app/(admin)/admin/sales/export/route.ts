@@ -4,7 +4,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { format } from "date-fns";
 import { getSession } from "@/lib/auth/session";
-import { getAllRepMetrics, getLeadSources } from "@/lib/data";
+import { getAllRepMetrics, getLeadSources, toSalesView } from "@/lib/data";
 import { resolveFilters } from "@/lib/periods";
 import { resolveSourceId, sourceNameMap } from "@/lib/sales";
 import { toCsv } from "@/lib/csv";
@@ -20,12 +20,13 @@ export async function GET(req: NextRequest) {
   const { range } = resolveFilters(sp);
   const sources = await getLeadSources(true);
   const sourceId = resolveSourceId(sp.source, sources);
-  const rows = await getAllRepMetrics({ range, sourceId });
+  const view = toSalesView(sp.view);
+  const rows = await getAllRepMetrics({ range, sourceId, view });
 
   const csv = toCsv(
     [
       "Rep",
-      "Leads",
+      view === "granot" ? "Total In" : "Leads",
       "Booked",
       "Closing ratio %",
       "Total lead cost",

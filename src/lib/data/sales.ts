@@ -11,7 +11,10 @@ import {
 import { createClient } from "@/lib/supabase/server";
 import { shiftWeek, weekStartOf } from "@/lib/weeks";
 import { getAdmins, getReps, getUserById } from "./users";
+import { createAdminClient } from "@/lib/supabase/admin";
 import type {
+  SalesSettings,
+  SalesView,
   CostRange,
   CostRangeChange,
   CostRangeMode,
@@ -183,6 +186,8 @@ export async function getLeads(
     range?: DateRange;
     sourceId?: string;
     status?: string;
+    /** Only jobs booked in this range (by booking date) */
+    bookedRange?: DateRange;
   } = {},
 ): Promise<Lead[]> {
   const sb = await createClient();
@@ -195,6 +200,12 @@ export async function getLeads(
       q = q.eq("status", opts.status);
     if (opts.range?.from) q = q.gte("date", opts.range.from);
     if (opts.range?.to) q = q.lte("date", opts.range.to);
+    if (opts.bookedRange) {
+      q = q.eq("status", "booked");
+      if (opts.bookedRange.from)
+        q = q.gte("booked_date", opts.bookedRange.from);
+      if (opts.bookedRange.to) q = q.lte("booked_date", opts.bookedRange.to);
+    }
     return q
       .order("date", { ascending: false })
       .order("created_at", { ascending: false })
@@ -204,7 +215,15 @@ export async function getLeads(
   return data.map(toLead);
 }
 
-function summarizeLeads(leads: Lead[]) {
+/** "lead" only when asked; Granot's way is the default */
+export const toSalesView = (v?: string | null): SalesView =>
+  v === "lead" ? "lead" : "granot";
+
+/**
+ * Totals for a set of leads. With `bookedInRange` (Granot view), revenue is
+ * the value of jobs booked in the period, whenever their lead came in.
+ */
+function summarizeLeads(leads: Lead[], bookedInRange?: Lead[]) {
   const booked = leads.filter((l) => l.status === "booked");
   const totalLeadCost = leads.reduce((s, l) => s + l.leadCost, 0);
   return {
@@ -213,91 +232,117 @@ function summarizeLeads(leads: Lead[]) {
     closingRatio: pct(booked.length, leads.length),
     totalLeadCost,
     cpa: pct(totalLeadCost, booked.length),
-    revenue: booked.reduce((s, l) => s + (l.jobValue ?? 0), 0),
+    revenue: (bookedInRange ?? booked).reduce(
+      (s, l) => s + (l.jobValue ?? 0),
+      0,
+    ),
   };
 }
 
+/** Granot view with a date range: the jobs booked in that range */
+const bookedFor = (
+  view: SalesView | undefined,
+  opts: { range?: DateRange; sourceId?: string; repId?: string },
+) =>
+  (view ?? "granot") === "granot" && opts.range
+    ? getLeads({
+        repId: opts.repId,
+        sourceId: opts.sourceId,
+        bookedRange: opts.range,
+      })
+    : Promise.resolve(undefined);
+
 export async function getRepMetrics(
   repId: string,
-  opts: { range?: DateRange; sourceId?: string } = {},
+  opts: { range?: DateRange; sourceId?: string; view?: SalesView } = {},
   repName?: string,
 ): Promise<RepMetrics> {
-  const [name, leads] = await Promise.all([
+  const { view, ...filters } = opts;
+  const [name, leads, booked] = await Promise.all([
     repName
       ? Promise.resolve(repName)
       : getUserById(repId).then((u) => u?.name ?? "Unknown"),
-    getLeads({ repId, ...opts }),
+    getLeads({ repId, ...filters }),
+    bookedFor(view, { ...filters, repId }),
   ]);
-  return { repId, repName: name, ...summarizeLeads(leads) };
+  return { repId, repName: name, ...summarizeLeads(leads, booked) };
 }
 
 export async function getAllRepMetrics(
-  opts: { range?: DateRange; sourceId?: string } = {},
+  opts: { range?: DateRange; sourceId?: string; view?: SalesView } = {},
 ) {
-  const [reps, admins, leads] = await Promise.all([
+  const { view, ...filters } = opts;
+  const [reps, admins, leads, bookedAll] = await Promise.all([
     getReps(true),
     getAdmins(true),
-    getLeads(opts),
+    getLeads(filters),
+    bookedFor(view, filters),
   ]);
+  // Same group for the period's leads and (Granot view) its bookings
+  const summarize = (match: (l: Lead) => boolean) =>
+    summarizeLeads(leads.filter(match), bookedAll?.filter(match));
   const rows: RepMetrics[] = reps.map((r) => ({
     repId: r.id,
     repName: r.name,
-    ...summarizeLeads(leads.filter((l) => l.repId === r.id)),
+    ...summarize((l) => l.repId === r.id),
   }));
   // Admins' own Granot leads: counted in company totals under their name,
   // but kept out of the rep comparison (kind "admin")
   for (const a of admins) {
-    const mine = leads.filter((l) => l.repId === a.id);
-    if (mine.length)
+    const mine = (l: Lead) => l.repId === a.id;
+    if (leads.some(mine) || bookedAll?.some(mine))
       rows.push({
         repId: a.id,
         repName: a.name,
         kind: "admin",
-        ...summarizeLeads(mine),
+        ...summarize(mine),
       });
   }
   // Leads with no sales rep in Granot at all: still counted, shown as "Unassigned"
   const known = new Set([...reps, ...admins].map((r) => r.id));
-  const unassigned = leads.filter(
-    (l) => !l.repId && !(l.granotRep ?? "").trim(),
-  );
-  if (unassigned.length) {
+  const isUnassigned = (l: Lead) => !l.repId && !(l.granotRep ?? "").trim();
+  if (leads.some(isUnassigned) || bookedAll?.some(isUnassigned)) {
     rows.push({
       repId: UNASSIGNED_REP_ID,
       repName: "Unassigned",
-      ...summarizeLeads(unassigned),
+      ...summarize(isUnassigned),
     });
   }
   // Leads whose Granot rep isn't linked to anyone: still counted, shown as "Unmatched"
-  const unmatched = leads.filter(
-    (l) =>
-      (l.repId && !known.has(l.repId)) ||
-      (!l.repId && (l.granotRep ?? "").trim()),
-  );
-  if (unmatched.length) {
+  const isUnmatched = (l: Lead) =>
+    (!!l.repId && !known.has(l.repId)) ||
+    (!l.repId && !!(l.granotRep ?? "").trim());
+  if (leads.some(isUnmatched) || bookedAll?.some(isUnmatched)) {
     rows.push({
       repId: UNMATCHED_REP_ID,
       repName: "Unmatched",
-      ...summarizeLeads(unmatched),
+      ...summarize(isUnmatched),
     });
   }
   return rows;
 }
 
 export async function getSourceBreakdown(
-  opts: { repId?: string; range?: DateRange } = {},
+  opts: { repId?: string; range?: DateRange; view?: SalesView } = {},
 ): Promise<SourceBreakdownRow[]> {
-  const [leads, sources] = await Promise.all([
-    getLeads(opts),
+  const { view, ...filters } = opts;
+  const [leads, sources, booked] = await Promise.all([
+    getLeads(filters),
     getLeadSources(true),
+    bookedFor(view, filters),
   ]);
   const names = Object.fromEntries(sources.map((s) => [s.id, s.name]));
-  const ids = Array.from(new Set(leads.map((l) => l.sourceId)));
+  const ids = Array.from(
+    new Set([...leads, ...(booked ?? [])].map((l) => l.sourceId)),
+  );
   return ids
     .map((sourceId) => ({
       sourceId,
       sourceName: names[sourceId] ?? "Unknown",
-      ...summarizeLeads(leads.filter((l) => l.sourceId === sourceId)),
+      ...summarizeLeads(
+        leads.filter((l) => l.sourceId === sourceId),
+        booked?.filter((l) => l.sourceId === sourceId),
+      ),
     }))
     .sort((a, b) => b.leads - a.leads);
 }
@@ -637,4 +682,105 @@ export async function deleteCostRange(id: string) {
   const sb = await createClient();
   const { error } = await sb.rpc("admin_delete_cost_range", { p_id: id });
   if (error) throw error;
+}
+
+/* =========================================================
+   Sales leaderboard (same counting as the Granot view).
+   Read with the service key so sales reps can see the ranking
+   when admins allow it; only names and totals leave this function.
+   ========================================================= */
+const SALES_DEFAULTS: SalesSettings = {
+  leaderboardMinLeads: 20,
+  repsSeeLeaderboard: false,
+};
+
+export async function getSalesSettings(): Promise<SalesSettings> {
+  const { data } = await createAdminClient()
+    .from("settings")
+    .select("sales")
+    .eq("id", 1)
+    .maybeSingle();
+  return {
+    ...SALES_DEFAULTS,
+    ...((data?.sales as Partial<SalesSettings> | null) ?? {}),
+  };
+}
+
+export async function updateSalesSettings(next: SalesSettings) {
+  const sb = await createClient();
+  const { error } = await sb
+    .from("settings")
+    .update({ sales: { ...next } })
+    .eq("id", 1);
+  if (error) throw error;
+}
+
+export type LeaderboardRow = {
+  repId: string;
+  repName: string;
+  leads: number;
+  booked: number;
+  closingRatio: number;
+  revenue: number;
+  totalLeadCost: number;
+  cpa: number;
+};
+
+/** Active sales reps only (no admins, no Unassigned / Unmatched) */
+export async function getSalesLeaderboard(
+  range?: DateRange,
+): Promise<LeaderboardRow[]> {
+  const sb = createAdminClient();
+  const [{ data: reps, error: rErr }, inRange, bookedInRange] =
+    await Promise.all([
+      sb
+        .from("profiles")
+        .select("id, name")
+        .eq("role", "sales_rep")
+        .eq("active", true),
+      fetchAll<{ rep_id: string | null; status: string; lead_cost: number }>(
+        (from, to) => {
+          let q = sb
+            .from("leads")
+            .select("rep_id, status, lead_cost")
+            .eq("is_test", false)
+            .not("rep_id", "is", null);
+          if (range?.from) q = q.gte("date", range.from);
+          if (range?.to) q = q.lte("date", range.to);
+          return q.order("id").range(from, to);
+        },
+      ),
+      fetchAll<{ rep_id: string | null; job_value: number | null }>(
+        (from, to) => {
+          let q = sb
+            .from("leads")
+            .select("rep_id, job_value")
+            .eq("is_test", false)
+            .eq("status", "booked")
+            .not("rep_id", "is", null);
+          if (range?.from) q = q.gte("booked_date", range.from);
+          if (range?.to) q = q.lte("booked_date", range.to);
+          return q.order("id").range(from, to);
+        },
+      ),
+    ]);
+  if (rErr) throw rErr;
+
+  return (reps ?? []).map((r) => {
+    const mine = inRange.filter((l) => l.rep_id === r.id);
+    const booked = mine.filter((l) => l.status === "booked").length;
+    const totalLeadCost = mine.reduce((s, l) => s + Number(l.lead_cost), 0);
+    return {
+      repId: r.id,
+      repName: r.name,
+      leads: mine.length,
+      booked,
+      closingRatio: pct(booked, mine.length),
+      revenue: bookedInRange
+        .filter((l) => l.rep_id === r.id)
+        .reduce((s, l) => s + Number(l.job_value ?? 0), 0),
+      totalLeadCost,
+      cpa: pct(totalLeadCost, booked),
+    };
+  });
 }

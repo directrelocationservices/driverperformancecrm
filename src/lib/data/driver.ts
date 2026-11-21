@@ -24,11 +24,14 @@ import type {
   ReviewPlatform,
   Upsell,
   UpsellType,
+  JobDocument,
+  JobDocumentKind,
 } from "@/types";
 import type { Database } from "@/types/supabase";
 
 type Tables = Database["public"]["Tables"];
-type JobRow = Tables["jobs"]["Row"];
+// (import_batch is only used by the past-jobs import script)
+type JobRow = Omit<Tables["jobs"]["Row"], "import_batch">;
 type PreDamageRow = Tables["pre_damages"]["Row"];
 type DamageRow = Tables["damage_incidents"]["Row"];
 type ReviewRow = Tables["reviews"]["Row"];
@@ -56,6 +59,9 @@ const toJob = (r: JobRow): Job => ({
   onTimeDelivery: r.on_time_delivery,
   createdAt: r.created_at,
   carrierId: r.carrier_id,
+  customerName: r.customer_name,
+  deliveryDate: r.delivery_date,
+  enteredBy: r.entered_by,
 });
 
 /** Private files → short-lived links the browser can open */
@@ -80,7 +86,7 @@ const url = (m: Map<string, string>, p: string | null | undefined) =>
    Jobs
    ========================================================= */
 const JOB_COLS =
-  "id, job_number, date, origin_city, origin_state, dest_city, dest_state, driver_id, crew_ids, delivered_by, on_time_pickup, on_time_delivery, created_at, carrier_id";
+  "id, job_number, date, origin_city, origin_state, dest_city, dest_state, driver_id, crew_ids, delivered_by, on_time_pickup, on_time_delivery, created_at, carrier_id, customer_name, delivery_date, entered_by";
 
 export async function getJobsByDriver(
   driverId: string,
@@ -134,7 +140,7 @@ export async function getJobDetail(
     .maybeSingle();
   if (!job) return null;
 
-  const [pre, dmg, rev, ups, notes] = await Promise.all([
+  const [pre, dmg, rev, ups, notes, docs] = await Promise.all([
     sb
       .from("pre_damages")
       .select("*")
@@ -149,8 +155,16 @@ export async function getJobDetail(
     sb.from("upsells").select("*").eq("job_id", jobId).order("created_at"),
     // Admin notes on damage (the database only returns these to admins)
     sb.from("damage_notes").select("*").eq("job_id", jobId).order("created_at"),
+    sb
+      .from("job_documents")
+      .select("*")
+      .eq("job_id", jobId)
+      .order("created_at"),
   ]);
   const noteRows = notes.data ?? [];
+  const docRows = (docs.data ?? []).filter(
+    (d) => opts.includeDeleted || !d.deleted_at,
+  );
 
   const keep = <T extends { deleted_at: string | null }>(rows: T[] | null) =>
     (rows ?? []).filter((r) => opts.includeDeleted || alive(r));
@@ -161,9 +175,10 @@ export async function getJobDetail(
   const upRows = keep<UpsellRow>(ups.data);
 
   const signed = await signPaths([
-    ...preRows.flatMap((p) => [...p.photo_paths, p.signature_path]),
+    ...preRows.flatMap((p) => [...p.photo_paths, p.signature_path ?? ""]),
     ...dmgRows.flatMap((d) => d.photo_paths),
     ...noteRows.flatMap((n) => n.photo_paths),
+    ...docRows.map((d) => d.path),
     ...revRows.map((r) => r.screenshot_path ?? ""),
   ]);
 
@@ -185,6 +200,8 @@ export async function getJobDetail(
     lng: p.lng,
     locked: p.locked,
     deletedAt: p.deleted_at,
+    officeEntered: p.office_entered,
+    createdBy: p.created_by,
   }));
 
   const damages: DamageIncident[] = dmgRows.map((d) => ({
@@ -234,7 +251,18 @@ export async function getJobDetail(
     deletedAt: u.deleted_at,
   }));
 
-  return { ...toJob(job), preDamages, damages, reviews, upsells };
+  const documents: JobDocument[] = docRows.map((d) => ({
+    id: d.id,
+    kind: d.kind as JobDocumentKind,
+    name: d.name,
+    url: url(signed, d.path),
+    isPdf: d.path.endsWith(".pdf"),
+    uploadedBy: d.uploaded_by,
+    createdAt: d.created_at,
+    deletedAt: d.deleted_at,
+  }));
+
+  return { ...toJob(job), preDamages, damages, reviews, upsells, documents };
 }
 
 /* ---------- Jobs with their evidence counts (lists, metrics) ---------- */
@@ -443,7 +471,7 @@ export async function getDriverMonthlyTrend(
 export class DuplicateJobNumberError extends Error {}
 
 export async function createJob(
-  input: Omit<Job, "id" | "createdAt">,
+  input: Omit<Job, "id" | "createdAt" | "enteredBy">,
 ): Promise<Job> {
   const sb = await createClient();
   const { data, error } = await sb
@@ -460,6 +488,10 @@ export async function createJob(
       delivered_by: input.deliveredBy,
       on_time_pickup: input.onTimePickup,
       on_time_delivery: input.onTimeDelivery,
+      carrier_id: input.carrierId ?? null,
+      customer_name: input.customerName?.trim() || null,
+      delivery_date: input.deliveryDate || null,
+      // entered_by is set by the database (the admin, or null for drivers)
     })
     .select(JOB_COLS)
     .single();
@@ -480,11 +512,13 @@ export async function createPreDamage(input: {
   photoPaths: string[];
   customerShown: boolean;
   customerName: string;
-  signaturePath: string;
-  capturedAtDevice: string;
+  signaturePath: string | null;
+  capturedAtDevice: string | null;
   syncedOffline: boolean;
   lat: number | null;
   lng: number | null;
+  /** Admin upload of photos sent later (not captured on site) */
+  officeEntered?: boolean;
 }): Promise<{ id: string; jobId: string }> {
   const sb = await createClient();
   const { data, error } = await sb
@@ -503,6 +537,7 @@ export async function createPreDamage(input: {
       synced_offline: input.syncedOffline,
       lat: input.lat,
       lng: input.lng,
+      office_entered: input.officeEntered ?? false,
       // received_at_server, locked and created_by are set by the database
     })
     .select("id, job_id")
@@ -845,4 +880,91 @@ export async function saveSyncReceipt(
     .insert({ client_id: clientId, user_id: userId, result });
   // A duplicate means another request already saved it: fine
   if (error && error.code !== "23505") throw error;
+}
+
+/* =========================================================
+   Office entries (jobs logged by admins for a driver)
+   ========================================================= */
+/** Admin: change a job's details (saved in the record history) */
+export async function updateJobDetails(
+  id: string,
+  input: Omit<Job, "id" | "createdAt" | "enteredBy">,
+): Promise<void> {
+  const sb = await createClient();
+  const { error } = await sb
+    .from("jobs")
+    .update({
+      job_number: input.jobNumber.trim(),
+      date: input.date,
+      origin_city: input.originCity.trim(),
+      origin_state: input.originState,
+      dest_city: input.destCity.trim(),
+      dest_state: input.destState,
+      driver_id: input.driverId,
+      crew_ids: input.crewIds,
+      delivered_by: input.deliveredBy,
+      on_time_pickup: input.onTimePickup,
+      on_time_delivery: input.onTimeDelivery,
+      carrier_id:
+        input.deliveredBy === "partner" ? (input.carrierId ?? null) : null,
+      customer_name: input.customerName?.trim() || null,
+      delivery_date: input.deliveryDate || null,
+    })
+    .eq("id", id);
+  if (error) {
+    if (error.code === "23505")
+      throw new DuplicateJobNumberError("This job number already exists");
+    throw error;
+  }
+}
+
+export async function addJobDocuments(
+  jobId: string,
+  files: { kind: JobDocumentKind; path: string; name: string }[],
+) {
+  if (!files.length) return;
+  const sb = await createClient();
+  const { error } = await sb.from("job_documents").insert(
+    files.map((f) => ({
+      job_id: jobId,
+      kind: f.kind,
+      path: f.path,
+      name: f.name,
+    })),
+  );
+  if (error) throw error;
+}
+
+export async function setJobDocumentDeleted(id: string, deleted: boolean) {
+  const sb = await createClient();
+  const { data, error } = await sb
+    .from("job_documents")
+    .update({ deleted_at: deleted ? new Date().toISOString() : null })
+    .eq("id", id)
+    .select("job_id")
+    .maybeSingle();
+  if (error) throw error;
+  return data?.job_id ?? null;
+}
+
+/**
+ * How many of a driver's jobs the office had to enter for them (missed entries).
+ * Past jobs loaded from a CSV aren't counted: they were before the portal.
+ */
+export async function countOfficeEnteredJobs(
+  driverId: string,
+  range?: DateRange,
+) {
+  const sb = await createClient();
+  let q = sb
+    .from("jobs")
+    .select("id", { count: "exact", head: true })
+    .eq("driver_id", driverId)
+    .not("entered_by", "is", null)
+    .is("import_batch", null);
+  if (range?.from) q = q.gte("date", range.from);
+  if (range?.to) q = q.lte("date", range.to);
+  const { count, error } = await q;
+  if (error) throw error;
+  return count ?? 0;
 }

@@ -1,20 +1,62 @@
+// File: src/app/(admin)/admin/leaderboard/page.tsx
+// (REPLACE the whole file)
+
 import { ShieldCheck, Star, Trophy } from "lucide-react";
 import { requireRole } from "@/lib/auth/session";
-import { getAllDriverMetrics } from "@/lib/data";
+import {
+  getAllDriverMetrics,
+  getSalesLeaderboard,
+  getSalesSettings,
+} from "@/lib/data";
 import { lowestDamage, topReviews, topUpsells } from "@/lib/metrics";
 import { resolveFilters, type FilterParams } from "@/lib/periods";
 import { formatCurrency } from "@/lib/format";
 import { PageHeader } from "@/components/shared/page-header";
 import { FilterBar } from "@/components/admin/filter-bar";
 import { RankList } from "@/components/admin/rank-list";
+import { ParamPills } from "@/components/shared/param-pills";
+import { SalesLeaderboard } from "@/components/sales/sales-leaderboard";
 
 export default async function LeaderboardPage({
   searchParams,
 }: {
-  searchParams: Promise<FilterParams>;
+  searchParams: Promise<FilterParams & { tab?: string }>;
 }) {
   await requireRole("admin");
-  const { range, verifiedOnly, label } = resolveFilters(await searchParams);
+  const sp = await searchParams;
+  const { range, verifiedOnly, label } = resolveFilters(sp);
+  const tabs = (
+    <ParamPills
+      param="tab"
+      options={[{ value: "sales", label: "Sales" }]}
+      allLabel="Drivers"
+      className="mb-4"
+    />
+  );
+
+  if (sp.tab === "sales") {
+    const [rows, settings] = await Promise.all([
+      getSalesLeaderboard(range),
+      getSalesSettings(),
+    ]);
+    return (
+      <div>
+        <PageHeader
+          title="Leaderboard"
+          description={`Top sales reps · ${label}`}
+        />
+        {tabs}
+        <FilterBar showVerified={false} />
+        <SalesLeaderboard rows={rows} minLeads={settings.leaderboardMinLeads} />
+        <p className="mt-4 text-center text-xs text-muted-foreground">
+          Counted like Granot&apos;s Salesmen Performance. Active sales reps
+          only. Close % needs at least {settings.leaderboardMinLeads} leads
+          (change it in Settings).
+        </p>
+      </div>
+    );
+  }
+
   const rows = await getAllDriverMetrics({ range, verifiedOnly });
 
   return (
@@ -23,6 +65,7 @@ export default async function LeaderboardPage({
         title="Leaderboard"
         description={`Top drivers · ${label}${verifiedOnly ? " · Verified only" : ""}`}
       />
+      {tabs}
       <FilterBar />
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         <RankList

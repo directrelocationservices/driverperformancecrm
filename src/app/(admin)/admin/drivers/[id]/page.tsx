@@ -7,6 +7,7 @@ import {
   ArrowLeft,
   CalendarCheck,
   CheckCircle2,
+  ClipboardPen,
   DollarSign,
   Mail,
   Phone,
@@ -21,6 +22,7 @@ import {
 } from "lucide-react";
 import { requireRole } from "@/lib/auth/session";
 import {
+  countOfficeEnteredJobs,
   getAllJobSummaries,
   getDriverMetrics,
   getDriverMonthlyTrend,
@@ -58,15 +60,17 @@ export default async function AdminDriverProfile({
 
   const { range, verifiedOnly, label } = resolveFilters(await searchParams);
 
-  const [m, trend, jobs, score, roadside, trucks, scoring] = await Promise.all([
-    getDriverMetrics(id, { range, verifiedOnly }),
-    getDriverMonthlyTrend(id, 6),
-    getAllJobSummaries({ range, driverId: id }),
-    getDriverScore(id, range),
-    getRoadside({ driverId: id, range }),
-    getTrucks(),
-    getScoring(),
-  ]);
+  const [m, trend, jobs, score, roadside, trucks, scoring, missed] =
+    await Promise.all([
+      getDriverMetrics(id, { range, verifiedOnly }),
+      getDriverMonthlyTrend(id, 6),
+      getAllJobSummaries({ range, driverId: id }),
+      getDriverScore(id, range),
+      getRoadside({ driverId: id, range }),
+      getTrucks(),
+      getScoring(),
+      countOfficeEnteredJobs(id, range),
+    ]);
 
   const units = Object.fromEntries(trucks.map((t) => [t.id, t.unitNumber]));
 
@@ -109,12 +113,20 @@ export default async function AdminDriverProfile({
             )}
           </div>
         </div>
-        <Link
-          href={`/admin/drivers/${driver.id}/damage/new`}
-          className="flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-lg border bg-white px-4 text-sm font-semibold transition hover:border-foreground/30"
-        >
-          <Plus className="h-4 w-4" /> Add damage
-        </Link>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          <Link
+            href={`/admin/jobs/new?driver=${driver.id}`}
+            className="flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-primary px-4 text-sm font-semibold text-white transition hover:bg-primary/90"
+          >
+            <Plus className="h-4 w-4" /> Add job
+          </Link>
+          <Link
+            href={`/admin/drivers/${driver.id}/damage/new`}
+            className="flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-lg border bg-white px-4 text-sm font-semibold transition hover:border-foreground/30"
+          >
+            <Plus className="h-4 w-4" /> Add damage
+          </Link>
+        </div>
       </div>
 
       <FilterBar />
@@ -184,6 +196,16 @@ export default async function AdminDriverProfile({
             label="On-time delivery"
             value={rate(m.onTimeDeliveryRate)}
             icon={CheckCircle2}
+          />
+          <StatCard
+            label="Jobs entered by office"
+            value={missed}
+            hint={
+              m.jobs
+                ? `${formatPercent(missed / m.jobs)} of jobs · driver missed these`
+                : "Driver missed these"
+            }
+            icon={ClipboardPen}
           />
         </div>
 

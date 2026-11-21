@@ -212,3 +212,67 @@ export const damageNoteServerSchema = z.object({
   note: z.string().trim().min(1, "Write a note").max(2000),
   photos: z.array(storagePath).max(MAX_PHOTOS, `Maximum ${MAX_PHOTOS} photos`),
 });
+/* ---------- Jobs entered by the office ---------- */
+const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Select a date");
+
+export const adminJobSchema = z
+  .object({
+    id: z.string().optional(),
+    driverId: z.string().min(1, "Select the driver"),
+    crewIds: z.array(z.string()).max(20),
+    jobNumber: z.string().trim().min(1, "Job number is required").max(40),
+    customerName: z.string().trim().max(120).optional(),
+    date: day,
+    deliveryDate: day.optional().or(z.literal("")),
+    originCity: z.string().trim().min(1, "Origin city is required").max(80),
+    originState: z.string().length(2, "Select a state"),
+    destCity: z.string().trim().min(1, "Destination city is required").max(80),
+    destState: z.string().length(2, "Select a state"),
+    deliveredBy: z.enum(["drs", "partner"]),
+    carrierId: z.string().optional().or(z.literal("")),
+    onTimePickup: z.boolean().nullable(),
+    onTimeDelivery: z.boolean().nullable(),
+  })
+  .refine((d) => !d.deliveryDate || d.deliveryDate >= d.date, {
+    path: ["deliveryDate"],
+    message: "Delivery can't be before the pickup date",
+  });
+export type AdminJobInput = z.infer<typeof adminJobSchema>;
+
+const officePreDamageBase = {
+  jobId: z.string().min(1),
+  item: z.string().trim().min(1, "Item is required").max(120),
+  location: z.string().trim().min(1, "Location on item is required").max(120),
+  description: z.string().trim().min(1, "Describe the damage").max(1000),
+  notes: z.string().trim().max(1000).optional(),
+  customerName: z.string().trim().min(2, "Customer name is required").max(120),
+  customerShown: z.boolean(),
+};
+export const officePreDamageSchema = z.object({
+  ...officePreDamageBase,
+  photos: z
+    .array(z.string().startsWith("data:image/"))
+    .min(1, "Add at least 1 photo")
+    .max(MAX_PHOTOS, `Maximum ${MAX_PHOTOS} photos`),
+});
+export const officePreDamageServerSchema = z.object({
+  ...officePreDamageBase,
+  photos: z
+    .array(storagePath)
+    .min(1, "Add at least 1 photo")
+    .max(MAX_PHOTOS, `Maximum ${MAX_PHOTOS} photos`),
+});
+
+export const jobDocumentsSchema = z.object({
+  jobId: z.string().min(1),
+  files: z
+    .array(
+      z.object({
+        kind: z.enum(["photo", "paperwork", "other"]),
+        path: z.string(),
+        name: z.string().trim().min(1).max(200),
+      }),
+    )
+    .min(1, "Choose at least one file")
+    .max(20, "Up to 20 files at a time"),
+});

@@ -1,3 +1,6 @@
+// File: src/components/sales/rep-performance.tsx
+// (REPLACE the whole file)
+
 import {
   BadgePercent,
   CalendarCheck,
@@ -15,20 +18,22 @@ import { formatCurrency, formatPercent } from "@/lib/format";
 import { StatCard } from "@/components/shared/stat-card";
 import { MetricChart } from "@/components/shared/metric-chart";
 import { SourceBreakdown } from "./source-breakdown";
-import type { DateRange } from "@/types";
+import type { DateRange, SalesView } from "@/types";
 
 export async function RepPerformance({
   repId,
   range,
   sourceId,
+  view = "granot",
 }: {
   repId: string;
   range?: DateRange;
   sourceId?: string;
+  view?: SalesView;
 }) {
   const [m, breakdown, trend] = await Promise.all([
-    getRepMetrics(repId, { range, sourceId }),
-    getSourceBreakdown({ repId, range }),
+    getRepMetrics(repId, { range, sourceId, view }),
+    getSourceBreakdown({ repId, range, view }),
     getRepMonthlyTrend(repId, 6),
   ]);
 
@@ -36,7 +41,7 @@ export async function RepPerformance({
     <div className="space-y-6">
       <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 2xl:grid-cols-6">
         <StatCard
-          label="Leads received"
+          label={view === "granot" ? "Total In" : "Leads received"}
           value={m.leads}
           icon={Users}
           tone="primary"

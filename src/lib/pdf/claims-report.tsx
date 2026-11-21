@@ -1,3 +1,6 @@
+// File: src/lib/pdf/claims-report.tsx
+// (REPLACE the whole file)
+
 import {
   Document,
   Image,
@@ -197,12 +200,25 @@ export function ClaimsReport({
             ["Origin", `${job.originCity}, ${job.originState}`],
             ["Destination", `${job.destCity}, ${job.destState}`],
             ["Crew", crewNames || driverName],
-            ["Recorded by", driverName],
+            [
+              "Job logged by",
+              job.enteredBy
+                ? `Office (${names[job.enteredBy] ?? "admin"})`
+                : `${driverName} (driver)`,
+            ],
             [
               "Delivered by",
               job.deliveredBy === "partner" ? "Partner crew" : "DRS crew",
             ],
             ["Items documented", String(entries.length)],
+            [
+              "Signed paperwork on file",
+              String(
+                (job.documents ?? []).filter(
+                  (d) => !d.deletedAt && d.kind === "paperwork",
+                ).length,
+              ),
+            ],
           ].map(([label, value]) => (
             <View key={label} style={s.cell}>
               <Text style={s.label}>{label}</Text>
@@ -226,7 +242,11 @@ export function ClaimsReport({
                 <Text style={s.entryHeadText}>
                   Item {i + 1} of {entries.length}: {p.item}
                 </Text>
-                <Text style={s.entryHeadMeta}>Record ID {p.id} · Locked</Text>
+                <Text style={s.entryHeadMeta}>
+                  Record ID {p.id} ·{" "}
+                  {p.officeEntered ? "Entered by office" : "Captured on site"} ·
+                  Locked
+                </Text>
               </View>
 
               <View style={s.body}>
@@ -269,16 +289,37 @@ export function ClaimsReport({
                       // eslint-disable-next-line jsx-a11y/alt-text
                       <Image src={p.signatureUrl} style={s.signature} />
                     ) : (
-                      <Text style={s.metaLine}>No signature captured</Text>
+                      <Text style={s.metaLine}>
+                        {p.officeEntered
+                          ? "Not signed on site (see signed paperwork, if any)"
+                          : "No signature captured"}
+                      </Text>
                     )}
                   </View>
                   <View style={s.col}>
                     <Text style={s.label}>Record details</Text>
+                    {p.officeEntered ? (
+                      <>
+                        <Text style={s.metaLine}>
+                          Source: entered by the office (
+                          {names[p.createdBy ?? ""] ?? "admin"}) from photos the
+                          driver sent after the job
+                        </Text>
+                        <Text style={s.metaLine}>
+                          Not captured on site: no device time or GPS
+                        </Text>
+                      </>
+                    ) : (
+                      <Text style={s.metaLine}>
+                        Captured on device:{" "}
+                        {formatDateTimeET(p.capturedAtDevice ?? "")}
+                      </Text>
+                    )}
                     <Text style={s.metaLine}>
-                      Captured on device: {formatDateTimeET(p.capturedAtDevice)}
-                    </Text>
-                    <Text style={s.metaLine}>
-                      Received by server: {formatDateTimeET(p.receivedAtServer)}
+                      {p.officeEntered
+                        ? "Uploaded by office"
+                        : "Received by server"}
+                      : {formatDateTimeET(p.receivedAtServer)}
                     </Text>
                     <Text style={s.metaLine}>
                       GPS:{" "}

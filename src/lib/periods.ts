@@ -1,4 +1,9 @@
+// File: src/lib/periods.ts
+// (REPLACE the whole file)
+
 import {
+  endOfWeek,
+  startOfWeek,
   endOfMonth,
   endOfQuarter,
   endOfYear,
@@ -12,6 +17,7 @@ import {
 import type { DateRange } from "@/types";
 
 export const PERIOD_OPTIONS = [
+  { key: "week", label: "This week" },
   { key: "month", label: "This month" },
   { key: "quarter", label: "This quarter" },
   { key: "year", label: "This year" },
@@ -54,7 +60,13 @@ export function resolveFilters(sp: FilterParams) {
   ) as PeriodKey;
 
   let range: DateRange | undefined;
-  if (period === "month")
+  // Weeks run Monday to Sunday, like the weekly lead costs
+  if (period === "week")
+    range = {
+      from: iso(startOfWeek(now, { weekStartsOn: 1 })),
+      to: iso(endOfWeek(now, { weekStartsOn: 1 })),
+    };
+  else if (period === "month")
     range = { from: iso(startOfMonth(now)), to: iso(endOfMonth(now)) };
   else if (period === "quarter")
     range = { from: iso(startOfQuarter(now)), to: iso(endOfQuarter(now)) };
