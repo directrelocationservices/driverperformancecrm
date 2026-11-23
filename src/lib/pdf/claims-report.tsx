@@ -11,7 +11,20 @@ import {
 } from "@react-pdf/renderer";
 import { formatDate, formatDateTimeET } from "@/lib/format";
 import { ACTION_LABELS, diffLines } from "@/lib/audit";
-import type { AuditEntry, CompanyInfo, JobDetail } from "@/types";
+import {
+  OFFLOAD_DESTINATION_LABELS,
+  type AuditEntry,
+  type CompanyInfo,
+  type JobDetail,
+  type Offload,
+} from "@/types";
+
+function offloadDetails(o: Offload) {
+  if (o.destination === "storage")
+    return `${o.storageFacility ?? ""}, ${o.storageAddress ?? ""}, unit ${o.storageUnit ?? ""}`;
+  if (o.destination === "carrier") return o.carrierName ?? "Partner carrier";
+  return "";
+}
 
 const RED = "#d71920";
 const BLACK = "#111111";
@@ -160,6 +173,11 @@ export function ClaimsReport({
   company,
 }: Props) {
   const entries = job.preDamages.filter((p) => !p.deletedAt);
+  const offloads = (job.offloads ?? []).filter((o) => !o.deletedAt);
+  const historyOf = (id: string) =>
+    audit
+      .filter((a) => a.entityId === id && a.action === "update")
+      .sort((a, b) => a.changedAt.localeCompare(b.changedAt));
 
   return (
     <Document
@@ -211,6 +229,14 @@ export function ClaimsReport({
               job.deliveredBy === "partner" ? "Partner crew" : "DRS crew",
             ],
             ["Items documented", String(entries.length)],
+            [
+              "Offloaded at",
+              offloads.length
+                ? offloads
+                    .map((o) => OFFLOAD_DESTINATION_LABELS[o.destination])
+                    .join(", ")
+                : "Not recorded",
+            ],
             [
               "Signed paperwork on file",
               String(
@@ -335,6 +361,137 @@ export function ClaimsReport({
                     </Text>
                   </View>
                 </View>
+
+                {history.length > 0 && (
+                  <View style={s.history}>
+                    <Text style={s.label}>
+                      Record history (original values preserved)
+                    </Text>
+                    {history.map((h) => (
+                      <Text key={h.id} style={s.historyLine}>
+                        {formatDateTimeET(h.changedAt)} —{" "}
+                        {ACTION_LABELS[h.action]} by{" "}
+                        {names[h.changedBy] ?? "admin"}
+                        {h.reason ? ` (reason: ${h.reason})` : ""}:{" "}
+                        {diffLines(h.before, h.after)
+                          .map((d) => `${d.field} "${d.from}" → "${d.to}"`)
+                          .join("; ")}
+                      </Text>
+                    ))}
+                  </View>
+                )}
+              </View>
+            </View>
+          );
+        })}
+
+        {/* Offload records */}
+        {offloads.length > 0 && (
+          <View break={entries.length > 0}>
+            <Text style={s.title}>Offload Record</Text>
+            <Text style={s.subtitle}>
+              Where the goods were offloaded, with photos, location, time and
+              paperwork captured on site.
+            </Text>
+          </View>
+        )}
+        {offloads.map((o, i) => {
+          const history = historyOf(o.id);
+          const details = offloadDetails(o);
+          const pagePhotos = o.forms.flatMap((f) =>
+            f.files
+              .filter((p) => !p.isPdf && p.url)
+              .map((p, idx) => ({
+                url: p.url,
+                label: `${f.name} p.${idx + 1}`,
+              })),
+          );
+          return (
+            <View key={o.id} style={s.entry}>
+              <View style={s.entryHead}>
+                <Text style={s.entryHeadText}>
+                  Offload {i + 1} of {offloads.length}:{" "}
+                  {OFFLOAD_DESTINATION_LABELS[o.destination]}
+                </Text>
+                <Text style={s.entryHeadMeta}>
+                  Record ID {o.id} · Captured on site · Locked
+                </Text>
+              </View>
+              <View style={s.body}>
+                <View style={s.twoCol}>
+                  <View style={s.col}>
+                    <Text style={s.label}>Offloaded at</Text>
+                    <Text style={s.text}>
+                      {OFFLOAD_DESTINATION_LABELS[o.destination]}
+                      {details ? ` — ${details}` : ""}
+                    </Text>
+                  </View>
+                  <View style={s.col}>
+                    <Text style={s.label}>Note</Text>
+                    <Text style={s.text}>{o.note || "—"}</Text>
+                  </View>
+                </View>
+
+                <Text style={s.label}>Photos ({o.photos.length})</Text>
+                <View style={s.photos}>
+                  {o.photos.map((src, idx) => (
+                    // eslint-disable-next-line jsx-a11y/alt-text
+                    <Image key={idx} src={src} style={s.photo} />
+                  ))}
+                </View>
+
+                <View style={s.ack}>
+                  <View style={s.col}>
+                    <Text style={s.label}>Paperwork</Text>
+                    {o.forms.length === 0 && (
+                      <Text style={s.metaLine}>No forms were required.</Text>
+                    )}
+                    {o.forms.map((f) => (
+                      <Text key={f.formId} style={s.metaLine}>
+                        {f.name}:{" "}
+                        {f.files.length
+                          ? `${f.files.length} page${f.files.length === 1 ? "" : "s"} on file`
+                          : `MISSING${f.required ? " (required)" : ""}`}
+                      </Text>
+                    ))}
+                  </View>
+                  <View style={s.col}>
+                    <Text style={s.label}>Record details</Text>
+                    <Text style={s.metaLine}>
+                      Submitted by: {names[o.createdBy ?? ""] ?? "driver"}
+                    </Text>
+                    <Text style={s.metaLine}>
+                      Received by server: {formatDateTimeET(o.receivedAtServer)}
+                    </Text>
+                    <Text style={s.metaLine}>
+                      Saved offline:{" "}
+                      {o.syncedOffline
+                        ? `Yes, on ${formatDateTimeET(o.capturedAtDevice)} (uploaded when signal returned)`
+                        : "No"}
+                    </Text>
+                    <Text style={s.metaLine}>
+                      GPS:{" "}
+                      {o.lat !== null && o.lng !== null
+                        ? `${o.lat.toFixed(5)}, ${o.lng.toFixed(5)}${o.accuracy != null ? ` (±${o.accuracy}m)` : ""}`
+                        : "Not available"}
+                    </Text>
+                    <Text style={s.metaLine}>
+                      Address: {o.address || "Not available"}
+                    </Text>
+                  </View>
+                </View>
+
+                {pagePhotos.length > 0 && (
+                  <View style={{ marginTop: 8 }}>
+                    <Text style={s.label}>Paperwork pages (photos)</Text>
+                    <View style={s.photos}>
+                      {pagePhotos.map((p, idx) => (
+                        // eslint-disable-next-line jsx-a11y/alt-text
+                        <Image key={idx} src={p.url} style={s.photo} />
+                      ))}
+                    </View>
+                  </View>
+                )}
 
                 {history.length > 0 && (
                   <View style={s.history}>

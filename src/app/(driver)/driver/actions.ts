@@ -12,6 +12,7 @@ import {
   createReviewFor,
   createUpsellFor,
   setOnTimeFor,
+  createOffloadFor,
 } from "@/lib/services/driver";
 
 // Inputs are checked on the server, so they arrive as `unknown`.
@@ -68,4 +69,13 @@ export async function setOnTimeAction(input: unknown): Promise<ActionResult> {
   const user = await requireRole("driver");
   const res = await setOnTimeFor(user, input);
   if (!res.ok) return { error: res.error, fieldErrors: res.fieldErrors };
+}
+
+export async function createOffloadAction(
+  input: unknown,
+): Promise<ActionResult> {
+  const user = await requireRole("driver");
+  const res = await createOffloadFor(user, input);
+  if (!res.ok) return { error: res.error, fieldErrors: res.fieldErrors };
+  redirect(`/driver/jobs/${res.jobId}`);
 }

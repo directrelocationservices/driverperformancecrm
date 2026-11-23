@@ -3,6 +3,8 @@
 
 import { requireRole } from "@/lib/auth/session";
 import {
+  getOffloadAlertEmails,
+  getOffloadForms,
   getSalesSettings,
   getScoring,
   getSettings,
@@ -12,17 +14,21 @@ import { PageHeader } from "@/components/shared/page-header";
 import { SettingsForm } from "@/components/admin/settings-form";
 import { ScoringForm } from "@/components/fleet/scoring-form";
 import { SalesSettingsForm } from "@/components/admin/sales-settings-form";
+import { OffloadSettingsForm } from "@/components/admin/offload-settings-form";
 
 export const metadata = { title: "Settings" };
 
 export default async function SettingsPage() {
   await requireRole("admin");
-  const [settings, users, scoring, sales] = await Promise.all([
-    getSettings(),
-    getUsers(),
-    getScoring(),
-    getSalesSettings(),
-  ]);
+  const [settings, users, scoring, sales, offloadForms, offloadEmails] =
+    await Promise.all([
+      getSettings(),
+      getUsers(),
+      getScoring(),
+      getSalesSettings(),
+      getOffloadForms(true),
+      getOffloadAlertEmails(),
+    ]);
   const admins = users
     .filter((u) => u.role === "admin" && u.active)
     .map((u) => ({ id: u.id, name: u.name, email: u.email }));
@@ -31,9 +37,10 @@ export default async function SettingsPage() {
     <div>
       <PageHeader
         title="Settings"
-        description="Company details, notifications, driver scoring and the sales leaderboard."
+        description="Company details, notifications, offload paperwork, driver scoring and the sales leaderboard."
       />
       <SettingsForm settings={settings} admins={admins} />
+      <OffloadSettingsForm forms={offloadForms} alertEmails={offloadEmails} />
       <ScoringForm scoring={scoring} />
       <SalesSettingsForm settings={sales} />
     </div>

@@ -96,6 +96,23 @@ async function currentUserId() {
 const isDataUrl = (v: unknown): v is string =>
   typeof v === "string" && v.startsWith("data:image/");
 
+const isPdfDataUrl = (v: unknown): v is string =>
+  typeof v === "string" && v.startsWith("data:application/pdf");
+
+/** A paperwork page: a photo or a PDF, kept as a data URL until uploaded */
+async function uploadPage(base: string, dataUrl: string) {
+  if (!isPdfDataUrl(dataUrl))
+    return uploadDataUrl(EVIDENCE_BUCKET, base, dataUrl);
+  const bytes = atob(dataUrl.split(",", 2)[1] ?? "");
+  const arr = new Uint8Array(bytes.length);
+  for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+  return putFile(
+    EVIDENCE_BUCKET,
+    `${base}.pdf`,
+    new Blob([arr], { type: "application/pdf" }),
+  );
+}
+
 /* ---------- Job evidence ---------- */
 async function uploadJobImages(
   jobId: string,
@@ -148,6 +165,33 @@ export async function prepareEvidence(
       key,
       photos.filter(isDataUrl),
     );
+  } else if (type === "offload") {
+    const photos = (payload.photos as unknown[]) ?? [];
+    out.photos = await uploadJobImages(
+      jobId,
+      "offload",
+      key,
+      photos.filter(isDataUrl),
+    );
+    const forms =
+      (payload.forms as { formId: string; pages?: unknown[] }[]) ?? [];
+    const uploaded = [];
+    for (let f = 0; f < forms.length; f++) {
+      const pages = (forms[f].pages ?? []).filter(
+        (p): p is string => isDataUrl(p) || isPdfDataUrl(p),
+      );
+      const paths: string[] = [];
+      for (let i = 0; i < pages.length; i++) {
+        paths.push(
+          await uploadPage(
+            evidencePath(jobId, "offload", `${key}-form${f + 1}-page${i + 1}`),
+            pages[i],
+          ),
+        );
+      }
+      uploaded.push({ ...forms[f], pages: paths });
+    }
+    out.forms = uploaded;
   } else if (type === "review") {
     if (isDataUrl(payload.screenshot)) {
       out.screenshot = await uploadDataUrl(

@@ -19,6 +19,7 @@ import {
   DollarSign,
   Home,
   Lock,
+  PackageCheck,
   PlusCircle,
   RefreshCw,
   ShieldCheck,
@@ -35,6 +36,7 @@ import { PreDamageForm } from "@/components/driver/pre-damage-form";
 import { DamageForm } from "@/components/driver/damage-form";
 import { ReviewForm } from "@/components/driver/review-form";
 import { UpsellForm } from "@/components/driver/upsell-form";
+import { OffloadForm } from "@/components/driver/offload-form";
 import { PreTripForm } from "@/components/fleet/pre-trip-form";
 import { OutboxView } from "./outbox-view";
 import { useOnlineStatus } from "@/hooks/use-online-status";
@@ -503,6 +505,7 @@ function JobView({
       icon: Camera,
       primary: true,
     },
+    { href: `${base}/offload/new`, label: "Offload", icon: PackageCheck },
     { href: `${base}/damage/new`, label: "Report damage", icon: Wrench },
     { href: `${base}/review/new`, label: "Add review", icon: Star },
     { href: `${base}/upsell/new`, label: "Add upsell", icon: DollarSign },
@@ -764,6 +767,18 @@ export function OfflineApp() {
         title: "Pre-existing damage",
         description: "Record damage found at pickup, before loading.",
         node: <PreDamageForm jobId={jobId} />,
+      },
+      "offload/new": {
+        title: "Offload",
+        description:
+          "Saved on this phone. Dispatch is alerted when it uploads.",
+        node: (
+          <OffloadForm
+            jobId={jobId}
+            carriers={snapshot.carriers ?? []}
+            forms={snapshot.offloadForms ?? []}
+          />
+        ),
       },
       "damage/new": {
         title: "Report damage",

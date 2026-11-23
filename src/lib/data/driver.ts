@@ -5,6 +5,7 @@ import { endOfMonth, format, startOfMonth, subMonths } from "date-fns";
 import { createClient } from "@/lib/supabase/server";
 import { EVIDENCE_BUCKET } from "@/lib/evidence/paths";
 import { getDrivers } from "./users";
+import { getJobOffloads } from "./offloads";
 import type {
   AppSettings,
   AuditEntry,
@@ -262,7 +263,16 @@ export async function getJobDetail(
     deletedAt: d.deleted_at,
   }));
 
-  return { ...toJob(job), preDamages, damages, reviews, upsells, documents };
+  const offloads = await getJobOffloads(job.id, opts);
+  return {
+    ...toJob(job),
+    preDamages,
+    damages,
+    reviews,
+    upsells,
+    documents,
+    offloads,
+  };
 }
 
 /* ---------- Jobs with their evidence counts (lists, metrics) ---------- */

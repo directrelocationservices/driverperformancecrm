@@ -276,3 +276,151 @@ export const jobDocumentsSchema = z.object({
     .min(1, "Choose at least one file")
     .max(20, "Up to 20 files at a time"),
 });
+
+/* ---------- Offload ---------- */
+export const MIN_OFFLOAD_PHOTOS = 2;
+export const MAX_OFFLOAD_PHOTOS = 20;
+export const MAX_FORM_PAGES = 10;
+
+const offloadFields = {
+  jobId: z.string().min(1),
+  destination: z.enum(
+    ["customer", "warehouse", "storage", "carrier", "other"],
+    {
+      message: "Choose where it was offloaded",
+    },
+  ),
+  storageFacility: z.string().trim().max(120).optional(),
+  storageAddress: z.string().trim().max(200).optional(),
+  storageUnit: z.string().trim().max(40).optional(),
+  carrierId: z.string().optional(),
+  note: z.string().trim().max(1000).optional(),
+  capturedAtDevice: z.string().min(1),
+  lat: z.number().min(-90).max(90).nullable(),
+  lng: z.number().min(-180).max(180).nullable(),
+  accuracy: z.number().int().min(0).max(100000).nullable(),
+};
+
+type OffloadWhere = {
+  destination: string;
+  storageFacility?: string;
+  storageAddress?: string;
+  storageUnit?: string;
+  carrierId?: string;
+  note?: string;
+};
+
+/** The extra details each "where" option needs */
+function checkWhere(d: OffloadWhere, ctx: z.RefinementCtx) {
+  const need = (key: keyof OffloadWhere, message: string) => {
+    if (!d[key]?.trim()) ctx.addIssue({ code: "custom", path: [key], message });
+  };
+  if (d.destination === "storage") {
+    need("storageFacility", "Facility name is required");
+    need("storageAddress", "Facility address is required");
+    need("storageUnit", "Unit number is required");
+  }
+  if (d.destination === "carrier") need("carrierId", "Choose the carrier");
+  if (d.destination === "other") need("note", "Say where it was offloaded");
+}
+
+const formPagesClient = z.object({
+  formId: z.string().min(1),
+  name: z.string(),
+  required: z.boolean(),
+  pages: z
+    .array(
+      z
+        .string()
+        .refine(
+          (v) =>
+            v.startsWith("data:image/") || v.startsWith("data:application/pdf"),
+          "Pages must be photos or PDFs",
+        ),
+    )
+    .max(MAX_FORM_PAGES, `Up to ${MAX_FORM_PAGES} pages per form`),
+});
+
+export const offloadSchema = z
+  .object({
+    ...offloadFields,
+    photos: z
+      .array(z.string().startsWith("data:image/"))
+      .min(MIN_OFFLOAD_PHOTOS, `Add at least ${MIN_OFFLOAD_PHOTOS} photos`)
+      .max(MAX_OFFLOAD_PHOTOS, `Maximum ${MAX_OFFLOAD_PHOTOS} photos`),
+    forms: z.array(formPagesClient).max(30),
+  })
+  .superRefine((d, ctx) => {
+    checkWhere(d, ctx);
+    const missing = d.forms.filter((f) => f.required && !f.pages.length);
+    if (missing.length)
+      ctx.addIssue({
+        code: "custom",
+        path: ["forms"],
+        message: `Required: ${missing.map((f) => f.name).join(", ")}`,
+      });
+  });
+
+export const offloadServerSchema = z
+  .object({
+    ...offloadFields,
+    photos: z
+      .array(storagePath)
+      .min(MIN_OFFLOAD_PHOTOS, `Add at least ${MIN_OFFLOAD_PHOTOS} photos`)
+      .max(MAX_OFFLOAD_PHOTOS, `Maximum ${MAX_OFFLOAD_PHOTOS} photos`),
+    forms: z
+      .array(
+        z.object({
+          formId: z.string().min(1),
+          pages: z.array(storagePath).max(MAX_FORM_PAGES),
+        }),
+      )
+      .max(30),
+  })
+  .superRefine(checkWhere);
+
+/** Admin correction of an offload (evidence can't change) */
+export const offloadCorrectionSchema = z
+  .object({
+    id: z.string().min(1),
+    destination: offloadFields.destination,
+    storageFacility: offloadFields.storageFacility,
+    storageAddress: offloadFields.storageAddress,
+    storageUnit: offloadFields.storageUnit,
+    carrierId: offloadFields.carrierId,
+    note: offloadFields.note,
+    reason: z
+      .string()
+      .trim()
+      .min(3, "Give a reason for this correction")
+      .max(500),
+  })
+  .superRefine(checkWhere);
+export type OffloadCorrectionInput = z.infer<typeof offloadCorrectionSchema>;
+
+/** Admin adds missing paperwork pages to a submitted offload */
+export const offloadPagesSchema = z.object({
+  id: z.string().min(1),
+  formId: z.string().min(1),
+  pages: z
+    .array(storagePath)
+    .min(1, "Choose at least one page")
+    .max(MAX_FORM_PAGES),
+  reason: z.string().trim().min(3, "Give a reason").max(500),
+});
+
+export const offloadFormsSettingsSchema = z.object({
+  forms: z
+    .array(
+      z.object({
+        id: z.string().optional(),
+        name: z.string().trim().min(1, "Form name is required").max(80),
+        required: z.boolean(),
+        active: z.boolean(),
+      }),
+    )
+    .max(30, "Up to 30 forms"),
+  alertEmails: z
+    .array(z.string().trim().email("Enter a valid email"))
+    .max(20, "Up to 20 emails"),
+});

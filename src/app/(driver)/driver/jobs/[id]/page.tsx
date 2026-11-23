@@ -16,6 +16,7 @@ import {
   ExternalLink,
   Lock,
   MapPin,
+  PackageCheck,
   Plus,
   Star,
   Users,
@@ -35,6 +36,7 @@ import { PhotoThumb } from "@/components/shared/photo-thumb";
 import { REVIEW_PLATFORM_LABELS, UPSELL_TYPE_LABELS } from "@/types";
 import { cn } from "@/lib/utils";
 import { OnTimeCard } from "@/components/driver/on-time-card";
+import { OffloadCard } from "@/components/shared/offload-card";
 
 function Section({
   title,
@@ -195,6 +197,22 @@ export default async function DriverJobDetail({
         pickup={job.onTimePickup}
         delivery={job.onTimeDelivery}
       />
+
+      {/* Offload: where the goods were offloaded */}
+      <Section
+        title="Offload"
+        icon={PackageCheck}
+        count={job.offloads?.length ?? 0}
+        addHref={`${base}/offload/new`}
+        addLabel="Offload"
+        emptyText="Not offloaded yet. Tap Offload when you unload the goods."
+      >
+        <div className="space-y-4">
+          {(job.offloads ?? []).map((o) => (
+            <OffloadCard key={o.id} offload={o} />
+          ))}
+        </div>
+      </Section>
 
       {/* Pre-existing damage */}
       <Section

@@ -12,6 +12,7 @@ import {
   createReviewFor,
   createUpsellFor,
   setOnTimeFor,
+  createOffloadFor,
   type ServiceResult,
 } from "@/lib/services/driver";
 import { createPreTripFor, createWashFor } from "@/lib/services/fleet";
@@ -28,6 +29,7 @@ const bodySchema = z.object({
     "on_time",
     "pre_trip",
     "wash",
+    "offload",
   ]),
   payload: z.record(z.string(), z.unknown()),
 });
@@ -73,6 +75,9 @@ export async function POST(req: NextRequest) {
       break;
     case "review":
       res = await createReviewFor(user, body.payload);
+      break;
+    case "offload":
+      res = await createOffloadFor(user, body.payload, { offline: true });
       break;
     case "upsell":
       res = await createUpsellFor(user, body.payload);

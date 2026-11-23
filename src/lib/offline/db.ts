@@ -11,7 +11,8 @@ export type OutboxType =
   | "upsell"
   | "on_time"
   | "pre_trip"
-  | "wash";
+  | "wash"
+  | "offload";
 
 export interface OutboxItem {
   id: string; // unique per item; for "job" items this is the local job id
@@ -61,6 +62,9 @@ export type DriverSnapshot = {
   jobs: SnapshotJob[];
   /** Active trucks for the offline pre-trip check (older snapshots may not have it) */
   trucks?: SnapshotTruck[];
+  /** For the offline Offload form */
+  carriers?: { id: string; name: string }[];
+  offloadForms?: { id: string; name: string; required: boolean }[];
 };
 
 class OfflineDB extends Dexie {

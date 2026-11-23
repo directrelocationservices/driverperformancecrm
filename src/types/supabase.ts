@@ -887,6 +887,124 @@ export type Database = {
           },
         ];
       };
+      offload_forms: {
+        Row: {
+          active: boolean;
+          created_at: string;
+          id: string;
+          name: string;
+          required: boolean;
+          sort: number;
+        };
+        Insert: {
+          active?: boolean;
+          created_at?: string;
+          id?: string;
+          name: string;
+          required?: boolean;
+          sort?: number;
+        };
+        Update: {
+          active?: boolean;
+          created_at?: string;
+          id?: string;
+          name?: string;
+          required?: boolean;
+          sort?: number;
+        };
+        Relationships: [];
+      };
+      offloads: {
+        Row: {
+          accuracy: number | null;
+          address: string | null;
+          captured_at_device: string;
+          carrier_id: string | null;
+          created_by: string | null;
+          deleted_at: string | null;
+          destination: string;
+          forms: Json;
+          id: string;
+          job_id: string;
+          lat: number | null;
+          lng: number | null;
+          locked: boolean;
+          note: string | null;
+          photo_paths: string[];
+          received_at_server: string;
+          storage_address: string | null;
+          storage_facility: string | null;
+          storage_unit: string | null;
+          synced_offline: boolean;
+        };
+        Insert: {
+          accuracy?: number | null;
+          address?: string | null;
+          captured_at_device: string;
+          carrier_id?: string | null;
+          created_by?: string | null;
+          deleted_at?: string | null;
+          destination: string;
+          forms?: Json;
+          id?: string;
+          job_id: string;
+          lat?: number | null;
+          lng?: number | null;
+          locked?: boolean;
+          note?: string | null;
+          photo_paths: string[];
+          received_at_server?: string;
+          storage_address?: string | null;
+          storage_facility?: string | null;
+          storage_unit?: string | null;
+          synced_offline?: boolean;
+        };
+        Update: {
+          accuracy?: number | null;
+          address?: string | null;
+          captured_at_device?: string;
+          carrier_id?: string | null;
+          created_by?: string | null;
+          deleted_at?: string | null;
+          destination?: string;
+          forms?: Json;
+          id?: string;
+          job_id?: string;
+          lat?: number | null;
+          lng?: number | null;
+          locked?: boolean;
+          note?: string | null;
+          photo_paths?: string[];
+          received_at_server?: string;
+          storage_address?: string | null;
+          storage_facility?: string | null;
+          storage_unit?: string | null;
+          synced_offline?: boolean;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "offloads_carrier_id_fkey";
+            columns: ["carrier_id"];
+            isOneToOne: false;
+            referencedRelation: "carriers";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "offloads_created_by_fkey";
+            columns: ["created_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "offloads_job_id_fkey";
+            columns: ["job_id"];
+            isOneToOne: false;
+            referencedRelation: "jobs";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       pre_damages: {
         Row: {
           captured_at_device: string | null;
@@ -1228,6 +1346,7 @@ export type Database = {
           company: Json;
           damage_alert_emails: string[];
           id: number;
+          offload_alert_emails: string[];
           sales: Json;
           scoring: Json;
           updated_at: string;
@@ -1236,6 +1355,7 @@ export type Database = {
           company: Json;
           damage_alert_emails?: string[];
           id?: number;
+          offload_alert_emails?: string[];
           sales?: Json;
           scoring?: Json;
           updated_at?: string;
@@ -1244,6 +1364,7 @@ export type Database = {
           company?: Json;
           damage_alert_emails?: string[];
           id?: number;
+          offload_alert_emails?: string[];
           sales?: Json;
           scoring?: Json;
           updated_at?: string;
@@ -1521,6 +1642,20 @@ export type Database = {
         };
         Returns: string;
       };
+      admin_correct_offload: {
+        Args: {
+          p_carrier_id: string;
+          p_destination: string;
+          p_forms: Json;
+          p_id: string;
+          p_note: string;
+          p_reason: string;
+          p_storage_address: string;
+          p_storage_facility: string;
+          p_storage_unit: string;
+        };
+        Returns: string;
+      };
       admin_correct_pre_damage: {
         Args: {
           p_customer_name: string;
@@ -1560,6 +1695,10 @@ export type Database = {
         };
         Returns: string;
       };
+      admin_set_offload_deleted: {
+        Args: { p_deleted: boolean; p_id: string; p_reason?: string };
+        Returns: string;
+      };
       admin_set_weekly_cost: {
         Args: { p_cost: number; p_source: string; p_week: string };
         Returns: number;
@@ -1567,6 +1706,14 @@ export type Database = {
       app_role: {
         Args: never;
         Returns: Database["public"]["Enums"]["user_role"];
+      };
+      carrier_choices: {
+        Args: never;
+        Returns: {
+          active: boolean;
+          company_name: string;
+          id: string;
+        }[];
       };
       flag_overdue_washes: { Args: never; Returns: number };
       get_scoring: { Args: never; Returns: Json };

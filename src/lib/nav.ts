@@ -8,6 +8,7 @@ import {
   History,
   Home,
   LayoutDashboard,
+  PackageCheck,
   ListChecks,
   PlusCircle,
   RefreshCw,
@@ -52,6 +53,7 @@ export const ADMIN_NAV: NavGroup[] = [
     items: [
       { href: "/admin/drivers", label: "Drivers", icon: Truck },
       { href: "/admin/leaderboard", label: "Leaderboard", icon: Trophy },
+      { href: "/admin/offloads", label: "Offloads", icon: PackageCheck },
     ],
   },
   {

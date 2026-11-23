@@ -23,6 +23,8 @@ import {
   getDriverMetrics,
   getDrivers,
   getTrucks,
+  getCarrierChoices,
+  getOffloadForms,
 } from "@/lib/data";
 import { SnapshotSaver } from "@/components/driver/snapshot-saver";
 
@@ -34,12 +36,15 @@ export default async function DriverHome() {
     to: format(endOfMonth(now), "yyyy-MM-dd"),
   };
 
-  const [metrics, jobs, drivers, trucks] = await Promise.all([
-    getDriverMetrics(user.id, { range }),
-    getDriverJobSummaries(user.id),
-    getDrivers(),
-    getTrucks(false),
-  ]);
+  const [metrics, jobs, drivers, trucks, carriers, offloadForms] =
+    await Promise.all([
+      getDriverMetrics(user.id, { range }),
+      getDriverJobSummaries(user.id),
+      getDrivers(),
+      getTrucks(false),
+      getCarrierChoices(),
+      getOffloadForms(),
+    ]);
   const recent = jobs.slice(0, 6);
   const firstName = user.name.split(" ")[0];
 
@@ -65,6 +70,13 @@ export default async function DriverHome() {
             unitNumber: t.unitNumber,
             description: t.description,
             status: t.status,
+          })),
+          // For the offline Offload form
+          carriers: carriers.map((c) => ({ id: c.id, name: c.name })),
+          offloadForms: offloadForms.map((f) => ({
+            id: f.id,
+            name: f.name,
+            required: f.required,
           })),
         }}
       />

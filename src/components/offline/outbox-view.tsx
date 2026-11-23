@@ -7,6 +7,7 @@ import { useState, useSyncExternalStore } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { format, parseISO } from "date-fns";
 import {
+  PackageCheck,
   AlertTriangle,
   Camera,
   CheckCircle2,
@@ -47,6 +48,7 @@ const ICONS: Record<OutboxType, React.ElementType> = {
   on_time: Clock,
   pre_trip: ClipboardCheck,
   wash: Droplets,
+  offload: PackageCheck,
 };
 
 export function OutboxView() {

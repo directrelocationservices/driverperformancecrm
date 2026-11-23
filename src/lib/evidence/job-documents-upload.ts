@@ -1,5 +1,5 @@
 // File: src/lib/evidence/job-documents-upload.ts
-// (NEW file)
+// (REPLACE the whole file)
 
 "use client";
 
@@ -20,10 +20,12 @@ function dataUrlToBlob(dataUrl: string) {
   };
 }
 
-/** Uploads a photo or PDF to the job's private folder: <job>/document/<file> */
+/** Uploads a photo or PDF to the job's private folder: <job>/<kind>/<file> */
 export async function uploadJobDocument(
   jobId: string,
   file: File,
+  /** "offload" for paperwork added to an offload */
+  kind: "document" | "offload" = "document",
 ): Promise<{ path: string; name: string }> {
   if (file.size > 15 * 1024 * 1024)
     throw new Error(`${file.name} is too large (max 15 MB).`);
@@ -34,7 +36,7 @@ export async function uploadJobDocument(
   } else if (file.type !== "application/pdf") {
     throw new Error(`${file.name}: upload a PDF or a photo.`);
   }
-  const path = evidencePath(jobId, "document", `${crypto.randomUUID()}.${ext}`);
+  const path = evidencePath(jobId, kind, `${crypto.randomUUID()}.${ext}`);
   const { error } = await createClient()
     .storage.from(EVIDENCE_BUCKET)
     .upload(path, blob, { contentType: blob.type, upsert: false });

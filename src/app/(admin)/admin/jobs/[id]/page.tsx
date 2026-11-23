@@ -22,6 +22,7 @@ import {
   MapPin,
   MessageSquare,
   Package,
+  PackageCheck,
   Pencil,
   Plus,
   Star,
@@ -54,6 +55,8 @@ import { DamageCorrection } from "@/components/admin/damage-correction";
 import { DamageNoteForm } from "@/components/admin/damage-note-form";
 import { JobStatusForm } from "@/components/admin/job-status-form";
 import { JobDocuments } from "@/components/admin/job-documents";
+import { OffloadCard } from "@/components/shared/offload-card";
+import { OffloadAdmin } from "@/components/admin/offload-admin";
 import {
   DAMAGE_SOURCE_LABELS,
   REVIEW_PLATFORM_LABELS,
@@ -305,7 +308,8 @@ export default async function AdminJobDetail({
               <Pencil className="h-4 w-4" /> Edit job
             </Link>
 
-            {activePreDamage > 0 ? (
+            {activePreDamage > 0 ||
+            (job.offloads ?? []).some((o) => !o.deletedAt) ? (
               <a
                 href={`/admin/jobs/${job.id}/pdf`}
                 target="_blank"
@@ -512,6 +516,32 @@ export default async function AdminJobDetail({
               </article>
             );
           })}
+        </div>
+      </Section>
+
+      {/* Offloads: where the goods were offloaded */}
+      <Section
+        title="Offload"
+        icon={PackageCheck}
+        count={(job.offloads ?? []).length}
+      >
+        <div className="space-y-4">
+          {(job.offloads ?? []).map((o) => (
+            <OffloadCard
+              key={o.id}
+              offload={o}
+              byName={names[o.createdBy ?? ""]}
+            >
+              <OffloadAdmin
+                offload={o}
+                carriers={carrierOptions.map((c) => ({
+                  id: c.id,
+                  name: c.name,
+                }))}
+              />
+              <HistoryList entries={historyFor(o.id)} names={names} />
+            </OffloadCard>
+          ))}
         </div>
       </Section>
 

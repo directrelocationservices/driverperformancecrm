@@ -11,6 +11,7 @@ export const ENTITY_LABELS: Record<EntityType, string> = {
   upsell: "Upsell",
   carrier_claim: "Carrier claim",
   document: "Document",
+  offload: "Offload",
 };
 
 export const ACTION_LABELS: Record<AuditAction, string> = {
@@ -60,6 +61,13 @@ const FIELD_LABELS: Record<string, string> = {
   photo: "Photos",
   signature: "Signature",
   screenshot: "Screenshot",
+  destination: "Offloaded at",
+  storage_facility: "Storage facility",
+  storage_address: "Storage address",
+  storage_unit: "Storage unit",
+  carrier_id: "Carrier",
+  note: "Note",
+  forms: "Paperwork",
 };
 
 /** Internal columns that aren't useful in the history */
@@ -82,6 +90,8 @@ const HIDDEN = new Set([
   "uploaded_by",
   "path",
   "office_entered",
+  "accuracy",
+  "address",
 ]);
 
 /** File paths aren't readable; show "3 photos" / "Yes" instead */
@@ -108,7 +118,22 @@ const VALUE_LABELS: Record<string, string> = {
   paid: "Paid",
   closed: "Closed",
   other: "Other",
+  customer: "Customer delivery",
+  warehouse: "Our warehouse",
+  storage: "Storage unit",
+  carrier: "Partner carrier handoff",
 };
+
+/** Offload paperwork: "Bill of Lading: 2 pages · Inventory list: missing" */
+function formsSummary(v: unknown) {
+  if (!Array.isArray(v) || !v.length) return "—";
+  return v
+    .map((f: { name?: string; pages?: unknown[] }) => {
+      const n = Array.isArray(f.pages) ? f.pages.length : 0;
+      return `${f.name ?? "Form"}: ${n ? `${n} page${n === 1 ? "" : "s"}` : "missing"}`;
+    })
+    .join(" · ");
+}
 
 export function formatAuditValue(v: unknown) {
   if (v === null || v === undefined || v === "") return "—";
@@ -130,7 +155,13 @@ export function diffLines(
   );
   // "Deleted" reads better as Yes / No than as a timestamp
   const val = (k: string, v: unknown) =>
-    k === "deleted_at" ? (v ? "Yes" : "No") : formatAuditValue(v);
+    k === "deleted_at"
+      ? v
+        ? "Yes"
+        : "No"
+      : k === "forms"
+        ? formsSummary(v)
+        : formatAuditValue(v);
   return keys.map((k) => ({
     field: humanize(k),
     from: val(k, before?.[k]),
@@ -150,6 +181,10 @@ export function createdLines(after: Record<string, unknown> | null) {
     .filter(([k, v]) => !HIDDEN.has(k) && v !== null && v !== "")
     .map(([k, v]) => ({
       field: isFileKey(k) ? humanize(k.replace(/_paths?$/, "")) : humanize(k),
-      value: isFileKey(k) ? fileValue(v) : formatAuditValue(v),
+      value: isFileKey(k)
+        ? fileValue(v)
+        : k === "forms"
+          ? formsSummary(v)
+          : formatAuditValue(v),
     }));
 }

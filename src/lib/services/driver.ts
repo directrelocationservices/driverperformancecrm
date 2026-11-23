@@ -13,6 +13,10 @@ import {
   getDrivers,
   getJob,
   updateJob,
+  createOffload,
+  getCarrierChoices,
+  getOffloadForms,
+  setOffloadAddress,
 } from "@/lib/data";
 import {
   damageServerSchema,
@@ -22,10 +26,12 @@ import {
   reviewServerSchema,
   toFieldErrors,
   upsellSchema,
+  offloadServerSchema,
 } from "@/lib/validation/driver";
 import { isEvidencePathFor, type EvidenceKind } from "@/lib/evidence/paths";
-import { sendDamageAlert } from "@/lib/email/alerts";
-import type { User } from "@/types";
+import { sendDamageAlert, sendOffloadAlert } from "@/lib/email/alerts";
+import { reverseGeocode } from "@/lib/services/geocode";
+import { OFFLOAD_DESTINATION_LABELS, type User } from "@/types";
 
 export type ServiceResult =
   | { ok: true; id: string; jobId: string }
@@ -247,6 +253,114 @@ export async function setOnTimeFor(
     await updateJob(job.id, { [key]: parsed.data.value });
     refresh();
     return { ok: true, id: job.id, jobId: job.id };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+/** Driver offloads a job: photos, where, paperwork. Locked once saved; dispatch is emailed. */
+export async function createOffloadFor(
+  user: User,
+  raw: unknown,
+  opts: { offline?: boolean } = {},
+): Promise<ServiceResult> {
+  const parsed = offloadServerSchema.safeParse(raw);
+  if (!parsed.success)
+    return { ok: false, fieldErrors: toFieldErrors(parsed.error) };
+  const d = parsed.data;
+
+  const job = await ownJob(d.jobId, user.id);
+  if (!job) return { ok: false, error: "Job not found." };
+
+  const pagePaths = d.forms.flatMap((f) => f.pages);
+  if (!pathsOk([...d.photos, ...pagePaths], job.id, "offload")) {
+    return {
+      ok: false,
+      error: "Photos or paperwork didn't upload correctly. Please try again.",
+    };
+  }
+
+  // The forms list comes from Settings, never from the phone
+  const list = await getOffloadForms();
+  const forms = list.map((f) => ({
+    formId: f.id,
+    name: f.name,
+    required: f.required,
+    pages: d.forms.find((x) => x.formId === f.id)?.pages ?? [],
+  }));
+  const missingRequired = forms.filter((f) => f.required && !f.pages.length);
+  if (missingRequired.length) {
+    return {
+      ok: false,
+      fieldErrors: {
+        forms: `Required: ${missingRequired.map((f) => f.name).join(", ")}`,
+      },
+    };
+  }
+
+  let carrierName: string | undefined;
+  if (d.destination === "carrier") {
+    const carrier = (await getCarrierChoices()).find(
+      (c) => c.id === d.carrierId,
+    );
+    if (!carrier)
+      return { ok: false, fieldErrors: { carrierId: "Choose the carrier" } };
+    carrierName = carrier.name;
+  }
+
+  try {
+    const rec = await createOffload({
+      jobId: job.id,
+      destination: d.destination,
+      storageFacility: d.storageFacility,
+      storageAddress: d.storageAddress,
+      storageUnit: d.storageUnit,
+      carrierId: d.carrierId,
+      note: d.note,
+      photoPaths: d.photos,
+      forms,
+      lat: d.lat,
+      lng: d.lng,
+      accuracy: d.accuracy,
+      capturedAtDevice: d.capturedAtDevice,
+      syncedOffline: !!opts.offline,
+    });
+
+    // After the reply: look up the address, then alert dispatch
+    after(async () => {
+      let address: string | null = null;
+      if (d.lat != null && d.lng != null) {
+        address = await reverseGeocode(d.lat, d.lng);
+        if (address)
+          await setOffloadAddress(rec.id, address).catch((e) =>
+            console.error(e),
+          );
+      }
+      const whereDetails =
+        d.destination === "storage"
+          ? `${d.storageFacility}, ${d.storageAddress}, unit ${d.storageUnit}`
+          : d.destination === "carrier"
+            ? carrierName
+            : undefined;
+      await sendOffloadAlert({
+        jobId: job.id,
+        jobNumber: job.jobNumber,
+        driverName: user.name,
+        where: OFFLOAD_DESTINATION_LABELS[d.destination],
+        whereDetails,
+        note: d.note,
+        address,
+        lat: d.lat,
+        lng: d.lng,
+        receivedAt: rec.receivedAtServer,
+        capturedAt: d.capturedAtDevice,
+        savedOffline: !!opts.offline,
+        photoPaths: d.photos,
+        forms,
+      });
+    });
+    refresh();
+    return { ok: true, id: rec.id, jobId: job.id };
   } catch (err) {
     return fail(err);
   }

@@ -148,6 +148,66 @@ export interface JobDetail extends Job {
   reviews: Review[];
   upsells: Upsell[];
   documents?: JobDocument[];
+  offloads?: Offload[];
+}
+
+/* ---------- Offload ---------- */
+export type OffloadDestination =
+  "customer" | "warehouse" | "storage" | "carrier" | "other";
+
+export const OFFLOAD_DESTINATION_LABELS: Record<OffloadDestination, string> = {
+  customer: "Customer delivery",
+  warehouse: "Our warehouse",
+  storage: "Storage unit",
+  carrier: "Partner carrier handoff",
+  other: "Other",
+};
+
+/** A form drivers upload at offload (edited in Admin → Settings) */
+export interface OffloadForm {
+  id: string;
+  name: string;
+  required: boolean;
+  active: boolean;
+  sort: number;
+}
+
+export interface OffloadFormPages {
+  formId: string;
+  name: string;
+  required: boolean;
+  /** Storage paths of the pages (photos or PDFs) */
+  pages: string[];
+}
+
+export interface OffloadPage {
+  path: string;
+  url: string;
+  isPdf: boolean;
+}
+
+export interface Offload {
+  id: string;
+  jobId: string;
+  destination: OffloadDestination;
+  storageFacility?: string;
+  storageAddress?: string;
+  storageUnit?: string;
+  carrierId?: string;
+  carrierName?: string;
+  note?: string;
+  photos: string[];
+  forms: (OffloadFormPages & { files: OffloadPage[] })[];
+  lat: number | null;
+  lng: number | null;
+  accuracy: number | null;
+  address?: string;
+  capturedAtDevice: string;
+  receivedAtServer: string;
+  syncedOffline: boolean;
+  locked: boolean;
+  createdBy?: string;
+  deletedAt?: string;
 }
 
 export interface DriverMetrics {
@@ -231,7 +291,8 @@ export interface MonthlyPoint {
 }
 
 export type RecordKind = "pre_damage" | "damage" | "review" | "upsell";
-export type EntityType = RecordKind | "job" | "carrier_claim" | "document";
+export type EntityType =
+  RecordKind | "job" | "carrier_claim" | "document" | "offload";
 export type AuditAction =
   "create" | "update" | "delete" | "restore" | "verify" | "unverify";
 
@@ -267,6 +328,8 @@ export interface CompanyInfo {
 export interface AppSettings {
   company: CompanyInfo;
   damageAlertEmails: string[];
+  /** Offload alerts (empty = the damage alert emails) */
+  offloadAlertEmails?: string[];
   scoring: ScoringSettings;
 }
 
