@@ -344,7 +344,11 @@ export function sendOffloadAlert(input: {
  * Test logins handed to the client and the insurance underwriter. These are
  * placeholder Gmail addresses, not DRS inboxes, so they never get emails.
  */
-const TEST_LOGIN_EMAILS = new Set(["admin@gmail.com", "driver@gmail.com"]);
+const TEST_LOGIN_EMAILS = new Set([
+  "admin@gmail.com",
+  "driver@gmail.com",
+  "driver2@gmail.com",
+]);
 
 /** Every active admin's email */
 async function getAdminEmails(): Promise<string[]> {

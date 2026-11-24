@@ -395,7 +395,7 @@ export async function getTripBlocks(driverId: string): Promise<TripBlock[]> {
     if (s.state === "expired")
       blocks.push({
         kind: "driver_doc",
-        message: `Your ${s.label.toLowerCase()} expired. Upload the new one.`,
+        message: `Your ${s.label} expired. Upload the new one.`,
       });
   }
 
@@ -405,7 +405,7 @@ export async function getTripBlocks(driverId: string): Promise<TripBlock[]> {
       if (s.state === "expired")
         blocks.push({
           kind: "truck_doc",
-          message: `The truck's ${s.label.toLowerCase()} expired. Ask your admin to upload the new one.`,
+          message: `The truck's ${s.label} expired. Ask your admin to upload the new one.`,
         });
     }
   }
