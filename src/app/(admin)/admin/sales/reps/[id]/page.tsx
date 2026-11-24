@@ -99,6 +99,7 @@ export default async function AdminRepProfile({
       </p>
 
       <RepPerformance
+        linkJobs
         repId={id}
         range={range}
         sourceId={sourceId}

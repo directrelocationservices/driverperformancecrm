@@ -178,17 +178,64 @@ const adminDamageBase = {
     .max(1_000_000),
 };
 
-export const adminDamageSchema = z.object({
-  ...adminDamageBase,
-  photos: z
-    .array(z.string().startsWith("data:image/"))
-    .max(MAX_PHOTOS, `Maximum ${MAX_PHOTOS} photos`),
-});
+/** Customer service damage: up to 10 photos */
+export const MAX_ADMIN_DAMAGE_PHOTOS = 10;
 
-export const adminDamageServerSchema = z.object({
-  ...adminDamageBase,
-  photos: z.array(storagePath).max(MAX_PHOTOS, `Maximum ${MAX_PHOTOS} photos`),
-});
+const csDamageFields = {
+  reportedOn: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Select the date reported"),
+  reportedBy: z.string().min(1, "Select who took the report"),
+  attributedTo: z.enum(["pickup", "delivery", "carrier"], {
+    message: "Choose who it's attributed to",
+  }),
+  attributedDriverId: z.string().optional(),
+  carrierId: z.string().optional(),
+};
+
+function checkAttribution(
+  d: { attributedTo: string; attributedDriverId?: string; carrierId?: string },
+  ctx: z.RefinementCtx,
+) {
+  if (d.attributedTo === "carrier" && !d.carrierId)
+    ctx.addIssue({
+      code: "custom",
+      path: ["carrierId"],
+      message: "Choose the carrier",
+    });
+  if (d.attributedTo !== "carrier" && !d.attributedDriverId)
+    ctx.addIssue({
+      code: "custom",
+      path: ["attributedDriverId"],
+      message: "Choose the driver",
+    });
+}
+
+export const adminDamageSchema = z
+  .object({
+    ...adminDamageBase,
+    ...csDamageFields,
+    photos: z
+      .array(z.string().startsWith("data:image/"))
+      .max(
+        MAX_ADMIN_DAMAGE_PHOTOS,
+        `Maximum ${MAX_ADMIN_DAMAGE_PHOTOS} photos`,
+      ),
+  })
+  .superRefine(checkAttribution);
+
+export const adminDamageServerSchema = z
+  .object({
+    ...adminDamageBase,
+    ...csDamageFields,
+    photos: z
+      .array(storagePath)
+      .max(
+        MAX_ADMIN_DAMAGE_PHOTOS,
+        `Maximum ${MAX_ADMIN_DAMAGE_PHOTOS} photos`,
+      ),
+  })
+  .superRefine(checkAttribution);
 
 export const damageCorrectionSchema = z.object({
   id: z.string().min(1),
@@ -424,3 +471,67 @@ export const offloadFormsSettingsSchema = z.object({
     .array(z.string().trim().email("Enter a valid email"))
     .max(20, "Up to 20 emails"),
 });
+
+/* ---------- Reviews attributed to sales reps (admins) ---------- */
+const reviewAttributionFields = {
+  repId: z.string().optional(),
+  countsForDriver: z.boolean(),
+  stars: z.number().int().min(1, "Choose a star rating").max(5),
+  platform: z.enum(["google", "bbb", "trustpilot", "facebook", "other"], {
+    message: "Choose the platform",
+  }),
+  reason: z.string().trim().max(300).optional(),
+};
+
+const someoneChosen = (d: { repId?: string; countsForDriver: boolean }) =>
+  d.countsForDriver || !!d.repId;
+
+export const reviewAttributionSchema = z
+  .object({ id: z.string().min(1), ...reviewAttributionFields })
+  .refine(someoneChosen, {
+    path: ["repId"],
+    message: "Choose a sales rep, the driver, or both",
+  });
+export type ReviewAttributionInput = z.infer<typeof reviewAttributionSchema>;
+
+export const adminReviewServerSchema = z
+  .object({
+    jobId: z.string().min(1),
+    ...reviewAttributionFields,
+    reviewDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Select a date"),
+    link: z
+      .string()
+      .trim()
+      .max(2000)
+      .refine(
+        (v) => !v || /^https?:\/\//i.test(v),
+        "Enter a full link (https://...)",
+      )
+      .optional(),
+    screenshot: storagePath.optional(),
+  })
+  .refine(someoneChosen, {
+    path: ["repId"],
+    message: "Choose a sales rep, the driver, or both",
+  });
+
+export const adminReviewSchema = z
+  .object({
+    jobId: z.string().min(1),
+    ...reviewAttributionFields,
+    reviewDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Select a date"),
+    link: z
+      .string()
+      .trim()
+      .max(2000)
+      .refine(
+        (v) => !v || /^https?:\/\//i.test(v),
+        "Enter a full link (https://...)",
+      )
+      .optional(),
+    screenshot: z.string().startsWith("data:image/").optional(),
+  })
+  .refine(someoneChosen, {
+    path: ["repId"],
+    message: "Choose a sales rep, the driver, or both",
+  });

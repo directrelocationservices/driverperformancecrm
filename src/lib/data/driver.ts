@@ -12,6 +12,7 @@ import type {
   CompanyInfo,
   DamageIncident,
   DamageNote,
+  DamageAttribution,
   DamageSource,
   DateRange,
   DriverMetrics,
@@ -218,6 +219,11 @@ export async function getJobDetail(
     damageDate: d.damage_date,
     source: d.source as DamageSource,
     createdBy: d.created_by,
+    reportedOn: d.reported_on,
+    reportedBy: d.reported_by,
+    attributedTo: d.attributed_to as DamageAttribution | null,
+    attributedDriverId: d.attributed_driver_id,
+    carrierId: d.carrier_id,
     notes: noteRows
       .filter((n) => n.damage_id === d.id)
       .map((n): DamageNote => ({
@@ -240,6 +246,12 @@ export async function getJobDetail(
     verified: r.verified,
     createdAt: r.created_at,
     deletedAt: r.deleted_at,
+    repId: r.rep_id,
+    countsForDriver: r.counts_for_driver,
+    reason: r.reason,
+    reviewDate: r.review_date,
+    addedByAdmin: r.added_by_admin,
+    createdBy: r.created_by,
   }));
 
   const upsells: Upsell[] = upRows.map((u) => ({
@@ -278,8 +290,8 @@ export async function getJobDetail(
 /* ---------- Jobs with their evidence counts (lists, metrics) ---------- */
 const JOB_WITH_COUNTS = `${JOB_COLS},
   pre_damages(id, deleted_at),
-  damage_incidents(id, estimated_cost, deleted_at),
-  reviews(id, stars, verified, deleted_at),
+  damage_incidents(id, estimated_cost, deleted_at, attributed_to, attributed_driver_id),
+  reviews(id, stars, verified, deleted_at, counts_for_driver),
   upsells(id, amount, verified, deleted_at)`;
 
 type JobWithChildren = JobRow & {
@@ -288,12 +300,15 @@ type JobWithChildren = JobRow & {
     id: string;
     estimated_cost: number;
     deleted_at: string | null;
+    attributed_to: string | null;
+    attributed_driver_id: string | null;
   }[];
   reviews: {
     id: string;
     stars: number;
     verified: boolean;
     deleted_at: string | null;
+    counts_for_driver: boolean;
   }[];
   upsells: {
     id: string;
@@ -352,20 +367,59 @@ export async function getAllJobSummaries(
 /* =========================================================
    Driver metrics
    ========================================================= */
+/** Damage that customer service attributed to a driver on a job that isn't theirs (crew) */
+export type AttributedDamage = {
+  id: string;
+  jobId: string;
+  estimatedCost: number;
+  driverId: string;
+};
+
+/**
+ * Damage that counts against this driver:
+ *  - driver-logged damage on their own DRS jobs (as before)
+ *  - customer-service damage attributed to them (pickup or delivery crew)
+ * Damage attributed to a partner carrier never counts against a driver.
+ */
+function driverDamage(
+  driverId: string,
+  jobs: JobWithChildren[],
+  extra: AttributedDamage[],
+) {
+  const own = jobs.flatMap((j) =>
+    j.damage_incidents
+      .filter(alive)
+      .filter((d) =>
+        d.attributed_to
+          ? d.attributed_to !== "carrier" && d.attributed_driver_id === driverId
+          : j.delivered_by === "drs",
+      )
+      .map((d) => ({ jobId: j.id, cost: Number(d.estimated_cost) })),
+  );
+  const ownIds = new Set(jobs.map((j) => j.id));
+  const more = extra
+    .filter((d) => d.driverId === driverId && !ownIds.has(d.jobId))
+    .map((d) => ({ jobId: d.jobId, cost: d.estimatedCost }));
+  return [...own, ...more];
+}
+
 function metricsFrom(
   driverId: string,
   driverName: string,
   jobs: JobWithChildren[],
   verifiedOnly = false,
+  extra: AttributedDamage[] = [],
 ): DriverMetrics {
-  // Partner-delivered damage is tracked but does not count against the driver
-  const drsJobs = jobs.filter((j) => j.delivered_by === "drs");
-  const dmg = drsJobs.flatMap((j) => j.damage_incidents.filter(alive));
-  const damagedJobs = drsJobs.filter((j) =>
-    j.damage_incidents.some(alive),
-  ).length;
+  const dmg = driverDamage(driverId, jobs, extra);
+  const damagedJobs = new Set(dmg.map((d) => d.jobId)).size;
+  // Reviews about the sales rep only don't count for the driver
   const revs = jobs.flatMap((j) =>
-    j.reviews.filter((r) => alive(r) && (!verifiedOnly || r.verified)),
+    j.reviews.filter(
+      (r) =>
+        alive(r) &&
+        r.counts_for_driver !== false &&
+        (!verifiedOnly || r.verified),
+    ),
   );
   const ups = jobs.flatMap((j) =>
     j.upsells.filter((u) => alive(u) && (!verifiedOnly || u.verified)),
@@ -381,9 +435,9 @@ function metricsFrom(
     jobs: jobs.length,
     damageCount: dmg.length,
     damagedJobs,
-    damageCost: dmg.reduce((s, d) => s + Number(d.estimated_cost), 0),
+    damageCost: dmg.reduce((s, d) => s + d.cost, 0),
     // Share of jobs that had damage (2 incidents on 1 job = 100%, not 200%)
-    damageRate: pct(damagedJobs, jobs.length),
+    damageRate: Math.min(1, pct(damagedJobs, jobs.length)),
     reviewCount: revs.length,
     avgStars: revs.length
       ? revs.reduce((s, r) => s + r.stars, 0) / revs.length
@@ -412,8 +466,9 @@ export async function getDriverMetrics(
   driverName?: string,
 ): Promise<DriverMetrics> {
   const sb = await createClient();
-  const [jobs, name] = await Promise.all([
+  const [jobs, extra, name] = await Promise.all([
     loadJobsWithChildren({ driverId, range: opts.range }),
+    loadAttributedDamage({ driverId, range: opts.range }),
     driverName
       ? Promise.resolve(driverName)
       : sb
@@ -423,15 +478,41 @@ export async function getDriverMetrics(
           .maybeSingle()
           .then((r) => r.data?.name ?? "Unknown"),
   ]);
-  return metricsFrom(driverId, name, jobs, opts.verifiedOnly);
+  return metricsFrom(driverId, name, jobs, opts.verifiedOnly, extra);
+}
+
+/** Customer-service damage attributed to a driver (any job), for the driver's stats */
+async function loadAttributedDamage(
+  opts: { driverId?: string; range?: DateRange } = {},
+): Promise<AttributedDamage[]> {
+  const sb = await createClient();
+  let q = sb
+    .from("damage_incidents")
+    .select(
+      "id, job_id, estimated_cost, attributed_driver_id, jobs!inner(date)",
+    )
+    .in("attributed_to", ["pickup", "delivery"])
+    .is("deleted_at", null);
+  if (opts.driverId) q = q.eq("attributed_driver_id", opts.driverId);
+  if (opts.range?.from) q = q.gte("jobs.date", opts.range.from);
+  if (opts.range?.to) q = q.lte("jobs.date", opts.range.to);
+  const { data, error } = await q.limit(10000);
+  if (error) throw error;
+  return (data ?? []).map((d) => ({
+    id: d.id,
+    jobId: d.job_id,
+    estimatedCost: Number(d.estimated_cost),
+    driverId: d.attributed_driver_id as string,
+  }));
 }
 
 export async function getAllDriverMetrics(
   opts: { range?: DateRange; verifiedOnly?: boolean } = {},
 ) {
-  const [drivers, jobs] = await Promise.all([
+  const [drivers, jobs, extra] = await Promise.all([
     getDrivers(true),
     loadJobsWithChildren({ range: opts.range }),
+    loadAttributedDamage({ range: opts.range }),
   ]);
   return drivers.map((d) =>
     metricsFrom(
@@ -439,6 +520,7 @@ export async function getAllDriverMetrics(
       d.name,
       jobs.filter((j) => j.driver_id === d.id),
       opts.verifiedOnly,
+      extra,
     ),
   );
 }
@@ -566,6 +648,11 @@ export async function createDamage(input: {
   /** Admin entries only */
   damageDate?: string;
   source?: DamageSource;
+  reportedOn?: string;
+  reportedBy?: string;
+  attributedTo?: DamageAttribution;
+  attributedDriverId?: string | null;
+  carrierId?: string | null;
 }): Promise<{ id: string; jobId: string }> {
   const sb = await createClient();
   const { data, error } = await sb
@@ -579,6 +666,15 @@ export async function createDamage(input: {
       estimated_cost: input.estimatedCost,
       damage_date: input.damageDate ?? null,
       source: input.source ?? "driver",
+      reported_on: input.reportedOn ?? null,
+      reported_by: input.reportedBy ?? null,
+      attributed_to: input.attributedTo ?? null,
+      attributed_driver_id:
+        input.attributedTo && input.attributedTo !== "carrier"
+          ? (input.attributedDriverId ?? null)
+          : null,
+      carrier_id:
+        input.attributedTo === "carrier" ? (input.carrierId ?? null) : null,
     })
     .select("id, job_id")
     .single();
@@ -593,6 +689,12 @@ export async function createReview(input: {
   driverMentioned: boolean;
   link?: string;
   screenshotPath?: string;
+  /** Admin entries only */
+  repId?: string | null;
+  countsForDriver?: boolean;
+  reason?: string;
+  reviewDate?: string;
+  addedByAdmin?: boolean;
 }): Promise<{ id: string; jobId: string }> {
   const sb = await createClient();
   const { data, error } = await sb
@@ -604,6 +706,11 @@ export async function createReview(input: {
       driver_mentioned: input.driverMentioned,
       link: input.link || null,
       screenshot_path: input.screenshotPath || null,
+      rep_id: input.repId ?? null,
+      counts_for_driver: input.countsForDriver ?? true,
+      reason: input.reason || null,
+      review_date: input.reviewDate ?? null,
+      added_by_admin: input.addedByAdmin ?? false,
     })
     .select("id, job_id")
     .single();
@@ -679,6 +786,36 @@ export async function updatePreDamage(
     p_notes: patch.notes ?? "",
     p_customer_name: patch.customerName,
     p_reason: reason,
+  });
+  if (error) {
+    if (/not found/i.test(error.message)) return null;
+    throw error;
+  }
+  return { jobId: data };
+}
+
+/** Admin: who a review is about (sales rep and / or driver), stars, platform, reason */
+export async function attributeReview(
+  id: string,
+  patch: {
+    repId: string | null;
+    countsForDriver: boolean;
+    stars: number;
+    platform: ReviewPlatform;
+    reason?: string;
+  },
+  changeReason?: string,
+): Promise<{ jobId: string } | null> {
+  const sb = await createClient();
+  const { data, error } = await sb.rpc("admin_attribute_review", {
+    p_id: id,
+    // null = no sales rep (the generated types don't allow null here)
+    p_rep_id: patch.repId as string,
+    p_counts_for_driver: patch.countsForDriver,
+    p_stars: patch.stars,
+    p_platform: patch.platform,
+    p_reason: patch.reason ?? "",
+    p_change_reason: changeReason ?? "",
   });
   if (error) {
     if (/not found/i.test(error.message)) return null;

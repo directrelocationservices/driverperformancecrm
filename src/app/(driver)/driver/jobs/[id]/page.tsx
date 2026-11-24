@@ -327,6 +327,9 @@ export default async function DriverJobDetail({
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <p className="font-semibold">{d.item}</p>
                 <div className="flex flex-wrap gap-1.5">
+                  {d.attributedTo && (
+                    <Pill tone="primary">Reported by customer service</Pill>
+                  )}
                   <Pill tone={d.claimFiled ? "danger" : "neutral"}>
                     {d.claimFiled ? "Claim filed" : "No claim"}
                   </Pill>
@@ -345,10 +348,18 @@ export default async function DriverJobDetail({
                   ))}
                 </div>
               )}
-              {job.deliveredBy === "partner" && (
+              {d.attributedTo === "carrier" ? (
                 <p className="mt-3 text-xs text-muted-foreground">
-                  Partner delivery — not counted in your damage rate.
+                  Attributed to the partner carrier — not counted in your damage
+                  rate.
                 </p>
+              ) : (
+                !d.attributedTo &&
+                job.deliveredBy === "partner" && (
+                  <p className="mt-3 text-xs text-muted-foreground">
+                    Partner delivery — not counted in your damage rate.
+                  </p>
+                )
               )}
             </article>
           ))}

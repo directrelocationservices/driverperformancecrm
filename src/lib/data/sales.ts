@@ -252,40 +252,113 @@ const bookedFor = (
       })
     : Promise.resolve(undefined);
 
+/* ---------- Reviews attributed to sales reps ---------- */
+export type RepReview = {
+  id: string;
+  jobId: string;
+  jobNumber: string;
+  stars: number;
+  platform: string;
+  reason: string | null;
+  reviewDate: string;
+};
+
+/** Reviews admins attributed to sales reps, by review date */
+export async function getRepReviews(
+  opts: { repId?: string; range?: DateRange } = {},
+): Promise<(RepReview & { repId: string })[]> {
+  const sb = await createClient();
+  let q = sb
+    .from("reviews")
+    .select(
+      "id, job_id, rep_id, stars, platform, reason, review_date, created_at, jobs(job_number)",
+    )
+    .not("rep_id", "is", null)
+    .is("deleted_at", null);
+  if (opts.repId) q = q.eq("rep_id", opts.repId);
+  if (opts.range?.from) q = q.gte("review_date", opts.range.from);
+  if (opts.range?.to) q = q.lte("review_date", opts.range.to);
+  const { data, error } = await q
+    .order("review_date", { ascending: false })
+    .limit(5000);
+  if (error) throw error;
+  return (data ?? []).map((r) => ({
+    id: r.id,
+    jobId: r.job_id,
+    // Reps can't open jobs, so the job number may be hidden
+    jobNumber:
+      (r.jobs as unknown as { job_number: string } | null)?.job_number ?? "",
+    repId: r.rep_id as string,
+    stars: r.stars,
+    platform: r.platform,
+    reason: r.reason,
+    reviewDate: r.review_date ?? r.created_at.slice(0, 10),
+  }));
+}
+
+/** 4–5 stars = positive, 1–2 stars = negative */
+function reviewCounts(
+  reviews: { repId: string; stars: number }[],
+  repId: string,
+  booked: number,
+) {
+  const mine = reviews.filter((r) => r.repId === repId);
+  const positiveReviews = mine.filter((r) => r.stars >= 4).length;
+  const negativeReviews = mine.filter((r) => r.stars <= 2).length;
+  return {
+    positiveReviews,
+    negativeReviews,
+    positivePerBooked: pct(positiveReviews, booked),
+    negativePerBooked: pct(negativeReviews, booked),
+  };
+}
+
 export async function getRepMetrics(
   repId: string,
   opts: { range?: DateRange; sourceId?: string; view?: SalesView } = {},
   repName?: string,
 ): Promise<RepMetrics> {
   const { view, ...filters } = opts;
-  const [name, leads, booked] = await Promise.all([
+  const [name, leads, booked, reviews] = await Promise.all([
     repName
       ? Promise.resolve(repName)
       : getUserById(repId).then((u) => u?.name ?? "Unknown"),
     getLeads({ repId, ...filters }),
     bookedFor(view, { ...filters, repId }),
+    getRepReviews({ repId, range: filters.range }),
   ]);
-  return { repId, repName: name, ...summarizeLeads(leads, booked) };
+  const summary = summarizeLeads(leads, booked);
+  return {
+    repId,
+    repName: name,
+    ...summary,
+    ...reviewCounts(reviews, repId, summary.booked),
+  };
 }
 
 export async function getAllRepMetrics(
   opts: { range?: DateRange; sourceId?: string; view?: SalesView } = {},
 ) {
   const { view, ...filters } = opts;
-  const [reps, admins, leads, bookedAll] = await Promise.all([
+  const [reps, admins, leads, bookedAll, reviews] = await Promise.all([
     getReps(true),
     getAdmins(true),
     getLeads(filters),
     bookedFor(view, filters),
+    getRepReviews({ range: filters.range }),
   ]);
   // Same group for the period's leads and (Granot view) its bookings
   const summarize = (match: (l: Lead) => boolean) =>
     summarizeLeads(leads.filter(match), bookedAll?.filter(match));
-  const rows: RepMetrics[] = reps.map((r) => ({
-    repId: r.id,
-    repName: r.name,
-    ...summarize((l) => l.repId === r.id),
-  }));
+  const rows: RepMetrics[] = reps.map((r) => {
+    const summary = summarize((l) => l.repId === r.id);
+    return {
+      repId: r.id,
+      repName: r.name,
+      ...summary,
+      ...reviewCounts(reviews, r.id, summary.booked),
+    };
+  });
   // Admins' own Granot leads: counted in company totals under their name,
   // but kept out of the rep comparison (kind "admin")
   for (const a of admins) {
@@ -783,4 +856,27 @@ export async function getSalesLeaderboard(
       cpa: pct(totalLeadCost, booked),
     };
   });
+}
+
+/**
+ * The sales rep on the Granot lead with this job number (same number in the
+ * driver app and in Granot), to suggest when attributing a review.
+ */
+export async function getRepForJobNumber(
+  jobNumber: string,
+): Promise<string | null> {
+  const digits = jobNumber.replace(/\D/g, "");
+  if (digits.length < 5) return null;
+  const sb = await createClient();
+  const { data, error } = await sb
+    .from("leads")
+    .select("granot_id, rep_id")
+    .ilike("granot_id", `%${digits}%`)
+    .not("rep_id", "is", null)
+    .limit(5);
+  if (error) return null;
+  const hit = (data ?? []).find(
+    (l) => l.granot_id.replace(/\D/g, "") === digits,
+  );
+  return hit?.rep_id ?? null;
 }

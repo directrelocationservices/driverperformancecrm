@@ -30,6 +30,8 @@ import {
   createDamage,
   getDamageJobId,
   getJob,
+  getUserById,
+  getCarrier,
 } from "@/lib/data";
 import {
   adminDamageServerSchema,
@@ -476,6 +478,24 @@ export async function adminCreateDamageAction(input: unknown): Promise<{
   if (!damagePathsOk(d.photos, job.id))
     return { error: "Photos didn't upload correctly. Please try again." };
 
+  // Reported by an admin; attributed to a crew member of this job or a carrier
+  const reporter = await getUserById(d.reportedBy);
+  if (!reporter || reporter.role !== "admin")
+    return { fieldErrors: { reportedBy: "Select who took the report" } };
+  if (d.attributedTo === "carrier") {
+    if (!d.carrierId || !(await getCarrier(d.carrierId)))
+      return { fieldErrors: { carrierId: "Choose the carrier" } };
+  } else if (
+    !d.attributedDriverId ||
+    !Array.from(new Set([job.driverId, ...job.crewIds])).includes(
+      d.attributedDriverId,
+    )
+  ) {
+    return {
+      fieldErrors: { attributedDriverId: "Choose a driver on this job" },
+    };
+  }
+
   const { error } = await attempt(() =>
     createDamage({
       jobId: job.id,
@@ -486,11 +506,19 @@ export async function adminCreateDamageAction(input: unknown): Promise<{
       estimatedCost: d.estimatedCost,
       damageDate: d.damageDate,
       source: d.source,
+      reportedOn: d.reportedOn,
+      reportedBy: d.reportedBy,
+      attributedTo: d.attributedTo,
+      attributedDriverId: d.attributedDriverId ?? null,
+      carrierId: d.carrierId ?? null,
     }),
   );
   if (error) return { error };
   revalidateJob(job.id);
   revalidatePath(`/admin/drivers/${job.driverId}`);
+  if (d.attributedDriverId)
+    revalidatePath(`/admin/drivers/${d.attributedDriverId}`);
+  if (d.carrierId) revalidatePath(`/admin/carriers/${d.carrierId}`);
   return { jobId: job.id };
 }
 

@@ -274,6 +274,9 @@ export type Database = {
       };
       damage_incidents: {
         Row: {
+          attributed_driver_id: string | null;
+          attributed_to: string | null;
+          carrier_id: string | null;
           claim_filed: boolean;
           created_at: string;
           created_by: string | null;
@@ -285,9 +288,14 @@ export type Database = {
           item: string;
           job_id: string;
           photo_paths: string[];
+          reported_by: string | null;
+          reported_on: string | null;
           source: string;
         };
         Insert: {
+          attributed_driver_id?: string | null;
+          attributed_to?: string | null;
+          carrier_id?: string | null;
           claim_filed: boolean;
           created_at?: string;
           created_by?: string | null;
@@ -299,9 +307,14 @@ export type Database = {
           item: string;
           job_id: string;
           photo_paths: string[];
+          reported_by?: string | null;
+          reported_on?: string | null;
           source?: string;
         };
         Update: {
+          attributed_driver_id?: string | null;
+          attributed_to?: string | null;
+          carrier_id?: string | null;
           claim_filed?: boolean;
           created_at?: string;
           created_by?: string | null;
@@ -313,9 +326,25 @@ export type Database = {
           item?: string;
           job_id?: string;
           photo_paths?: string[];
+          reported_by?: string | null;
+          reported_on?: string | null;
           source?: string;
         };
         Relationships: [
+          {
+            foreignKeyName: "damage_incidents_attributed_driver_id_fkey";
+            columns: ["attributed_driver_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "damage_incidents_carrier_id_fkey";
+            columns: ["carrier_id"];
+            isOneToOne: false;
+            referencedRelation: "carriers";
+            referencedColumns: ["id"];
+          },
           {
             foreignKeyName: "damage_incidents_created_by_fkey";
             columns: ["created_by"];
@@ -328,6 +357,13 @@ export type Database = {
             columns: ["job_id"];
             isOneToOne: false;
             referencedRelation: "jobs";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "damage_incidents_reported_by_fkey";
+            columns: ["reported_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
             referencedColumns: ["id"];
           },
         ];
@@ -1216,6 +1252,8 @@ export type Database = {
       };
       reviews: {
         Row: {
+          added_by_admin: boolean;
+          counts_for_driver: boolean;
           created_at: string;
           created_by: string | null;
           deleted_at: string | null;
@@ -1224,11 +1262,16 @@ export type Database = {
           job_id: string;
           link: string | null;
           platform: Database["public"]["Enums"]["review_platform"];
+          reason: string | null;
+          rep_id: string | null;
+          review_date: string | null;
           screenshot_path: string | null;
           stars: number;
           verified: boolean;
         };
         Insert: {
+          added_by_admin?: boolean;
+          counts_for_driver?: boolean;
           created_at?: string;
           created_by?: string | null;
           deleted_at?: string | null;
@@ -1237,11 +1280,16 @@ export type Database = {
           job_id: string;
           link?: string | null;
           platform: Database["public"]["Enums"]["review_platform"];
+          reason?: string | null;
+          rep_id?: string | null;
+          review_date?: string | null;
           screenshot_path?: string | null;
           stars: number;
           verified?: boolean;
         };
         Update: {
+          added_by_admin?: boolean;
+          counts_for_driver?: boolean;
           created_at?: string;
           created_by?: string | null;
           deleted_at?: string | null;
@@ -1250,6 +1298,9 @@ export type Database = {
           job_id?: string;
           link?: string | null;
           platform?: Database["public"]["Enums"]["review_platform"];
+          reason?: string | null;
+          rep_id?: string | null;
+          review_date?: string | null;
           screenshot_path?: string | null;
           stars?: number;
           verified?: boolean;
@@ -1267,6 +1318,13 @@ export type Database = {
             columns: ["job_id"];
             isOneToOne: false;
             referencedRelation: "jobs";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "reviews_rep_id_fkey";
+            columns: ["rep_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
             referencedColumns: ["id"];
           },
         ];
@@ -1628,16 +1686,34 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      admin_attribute_review: {
+        Args: {
+          p_change_reason: string;
+          p_counts_for_driver: boolean;
+          p_id: string;
+          p_platform: Database["public"]["Enums"]["review_platform"];
+          p_reason: string;
+          p_rep_id: string;
+          p_stars: number;
+        };
+        Returns: string;
+      };
       admin_clear_sample_leads: { Args: never; Returns: number };
       admin_correct_damage: {
         Args: {
+          p_attributed_driver_id?: string;
+          p_attributed_to?: string;
+          p_carrier_id?: string;
           p_claim_filed: boolean;
           p_damage_date: string;
           p_description: string;
           p_estimated_cost: number;
           p_id: string;
           p_item: string;
+          p_keep_attribution?: boolean;
           p_reason: string;
+          p_reported_by?: string;
+          p_reported_on?: string;
           p_source: string;
         };
         Returns: string;

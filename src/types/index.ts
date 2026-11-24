@@ -112,7 +112,22 @@ export interface DamageIncident {
   source?: DamageSource;
   createdBy?: string | null;
   notes?: DamageNote[];
+  /** Customer service report (admins): when and who took it */
+  reportedOn?: string | null;
+  reportedBy?: string | null;
+  /** Who it counts against; null = the job's driver (driver-logged) */
+  attributedTo?: DamageAttribution | null;
+  attributedDriverId?: string | null;
+  carrierId?: string | null;
 }
+
+export type DamageAttribution = "pickup" | "delivery" | "carrier";
+
+export const DAMAGE_ATTRIBUTION_LABELS: Record<DamageAttribution, string> = {
+  pickup: "Pickup crew",
+  delivery: "Delivery crew",
+  carrier: "Partner carrier",
+};
 
 export type ReviewPlatform =
   "google" | "bbb" | "trustpilot" | "facebook" | "other";
@@ -128,7 +143,21 @@ export interface Review {
   verified: boolean;
   createdAt: string;
   deletedAt?: string | null;
+  /** Sales rep the review is about (admins set this) */
+  repId?: string | null;
+  /** Counts in the driver's review stats */
+  countsForDriver?: boolean;
+  /** Short reason, e.g. "price change" */
+  reason?: string | null;
+  /** YYYY-MM-DD */
+  reviewDate?: string | null;
+  addedByAdmin?: boolean;
+  createdBy?: string | null;
 }
+
+/** 4–5 stars = positive, 1–2 stars = negative (3 = neutral) */
+export const reviewTone = (stars: number) =>
+  stars >= 4 ? "positive" : stars <= 2 ? "negative" : "neutral";
 
 export type UpsellType = "packing" | "storage" | "materials" | "other";
 
@@ -244,6 +273,12 @@ export interface RepMetrics {
   totalLeadCost: number;
   cpa: number;
   revenue: number;
+  /** Reviews attributed to the rep (4–5 stars / 1–2 stars) */
+  positiveReviews?: number;
+  negativeReviews?: number;
+  /** Per booked job */
+  positivePerBooked?: number;
+  negativePerBooked?: number;
 }
 
 export interface DateRange {
@@ -679,6 +714,8 @@ export interface CarrierScore {
   /** What the damage cost DRS: paid to customers minus charged back */
   netCost: number;
   openClaims: number;
+  /** Damages customer service attributed to this carrier */
+  damageReports: number;
 }
 
 /* ---------- Lead costs for a date range ---------- */

@@ -1,5 +1,5 @@
 // File: src/lib/data/carriers.ts
-// (NEW file)
+// (REPLACE the whole file)
 
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -397,12 +397,24 @@ export async function getCarrierScores(
   if (opts.range?.from) jq = jq.gte("date", opts.range.from);
   if (opts.range?.to) jq = jq.lte("date", opts.range.to);
 
-  const [carriers, jobsRes, claims] = await Promise.all([
+  // Damage customer service attributed to a carrier
+  let dq = sb
+    .from("damage_incidents")
+    .select("job_id, carrier_id, jobs!inner(date)")
+    .eq("attributed_to", "carrier")
+    .is("deleted_at", null);
+  if (opts.carrierId) dq = dq.eq("carrier_id", opts.carrierId);
+  if (opts.range?.from) dq = dq.gte("jobs.date", opts.range.from);
+  if (opts.range?.to) dq = dq.lte("jobs.date", opts.range.to);
+
+  const [carriers, jobsRes, claims, dmgRes] = await Promise.all([
     getCarriers(),
     jq.limit(10000),
     getCarrierClaims({ carrierId: opts.carrierId }),
+    dq.limit(10000),
   ]);
   if (jobsRes.error) throw jobsRes.error;
+  if (dmgRes.error) throw dmgRes.error;
   const inRange = (d: string) =>
     (!opts.range?.from || d >= opts.range.from) &&
     (!opts.range?.to || d <= opts.range.to);
@@ -414,7 +426,12 @@ export async function getCarrierScores(
       const mine = claims.filter(
         (x) => x.carrierId === c.id && inRange(x.jobDate),
       );
-      const jobsWithClaims = new Set(mine.map((x) => x.jobId)).size;
+      const damages = (dmgRes.data ?? []).filter((d) => d.carrier_id === c.id);
+      // A job counts once whether it has a claim, a damage report, or both
+      const jobsWithClaims = new Set([
+        ...mine.map((x) => x.jobId),
+        ...damages.map((d) => d.job_id),
+      ]).size;
       const sum = (f: (x: CarrierClaim) => number) =>
         mine.reduce((s, x) => s + f(x), 0);
       const paid = sum((x) => x.paidAmount);
@@ -434,6 +451,7 @@ export async function getCarrierScores(
         openClaims: mine.filter(
           (x) => x.status === "open" || x.status === "submitted",
         ).length,
+        damageReports: damages.length,
       };
     });
 }

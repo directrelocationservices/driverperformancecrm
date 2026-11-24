@@ -68,6 +68,14 @@ const FIELD_LABELS: Record<string, string> = {
   carrier_id: "Carrier",
   note: "Note",
   forms: "Paperwork",
+  reported_on: "Date reported",
+  reported_by: "Reported by",
+  attributed_to: "Attributed to",
+  attributed_driver_id: "Attributed driver",
+  rep_id: "Sales rep",
+  counts_for_driver: "Counts for driver",
+  reason: "Reason",
+  review_date: "Review date",
 };
 
 /** Internal columns that aren't useful in the history */
@@ -92,6 +100,7 @@ const HIDDEN = new Set([
   "office_entered",
   "accuracy",
   "address",
+  "added_by_admin",
 ]);
 
 /** File paths aren't readable; show "3 photos" / "Yes" instead */
@@ -122,6 +131,8 @@ const VALUE_LABELS: Record<string, string> = {
   warehouse: "Our warehouse",
   storage: "Storage unit",
   carrier: "Partner carrier handoff",
+  pickup: "Pickup crew",
+  delivery: "Delivery crew",
 };
 
 /** Offload paperwork: "Bill of Lading: 2 pages · Inventory list: missing" */

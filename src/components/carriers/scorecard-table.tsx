@@ -1,5 +1,5 @@
 // File: src/components/carriers/scorecard-table.tsx
-// (NEW file)
+// (REPLACE the whole file)
 
 import Link from "next/link";
 import { formatCurrency, formatPercent } from "@/lib/format";
@@ -17,6 +17,7 @@ export function ScorecardTable({ rows }: { rows: CarrierScore[] }) {
   const cols: [string, (r: CarrierScore) => string, boolean?][] = [
     ["Jobs", (r) => String(r.jobs)],
     ["Claims", (r) => String(r.claims)],
+    ["Damage reports", (r) => String(r.damageReports ?? 0)],
     ["Claim rate", (r) => (r.jobs ? formatPercent(r.claimRate) : "—"), true],
     ["Claimed", (r) => formatCurrency(r.claimed)],
     ["Paid", (r) => formatCurrency(r.paid)],

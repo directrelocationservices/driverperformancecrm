@@ -1,11 +1,11 @@
 // File: src/components/admin/admin-damage-form.tsx
-// (NEW file)
+// (REPLACE the whole file)
 
 "use client";
 
 import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle } from "lucide-react";
+import { Headset } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import {
@@ -23,10 +23,17 @@ import { adminCreateDamageAction } from "@/app/(admin)/admin/actions";
 import {
   adminDamageSchema,
   DAMAGE_SOURCES,
+  MAX_ADMIN_DAMAGE_PHOTOS,
   toFieldErrors,
 } from "@/lib/validation/driver";
 import { OfflineUploadError, prepareEvidence } from "@/lib/evidence/upload";
-import { DAMAGE_SOURCE_LABELS } from "@/types";
+import {
+  DAMAGE_ATTRIBUTION_LABELS,
+  DAMAGE_SOURCE_LABELS,
+  type DamageAttribution,
+} from "@/types";
+
+type Option = { id: string; name: string };
 
 type YesNo = "yes" | "no" | "";
 export type DamageJobOption = {
@@ -34,6 +41,9 @@ export type DamageJobOption = {
   jobNumber: string;
   date: string;
   partner: boolean;
+  /** Driver first, then the rest of the crew */
+  crew: Option[];
+  carrierId?: string | null;
 };
 
 const today = () => {
@@ -47,10 +57,17 @@ export function AdminDamageForm({
   jobs,
   fixedJobId,
   cancelHref,
+  admins,
+  currentAdminId,
+  carriers,
 }: {
   jobs: DamageJobOption[];
   fixedJobId?: string;
   cancelHref: string;
+  /** Who can be "Reported by" */
+  admins: Option[];
+  currentAdminId: string;
+  carriers: Option[];
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -68,12 +85,30 @@ export function AdminDamageForm({
   const [photos, setPhotos] = useState<string[]>([]);
   const [claim, setClaim] = useState<YesNo>("");
   const [cost, setCost] = useState("");
+  const [reportedOn, setReportedOn] = useState(today());
+  const [reportedBy, setReportedBy] = useState(
+    admins.some((a) => a.id === currentAdminId) ? currentAdminId : "",
+  );
+  const [attributedTo, setAttributedTo] = useState<DamageAttribution | "">("");
+  const [driverId, setDriverId] = useState("");
+  const [carrierId, setCarrierId] = useState("");
 
   const byNumber = useMemo(
     () => new Map(jobs.map((j) => [j.jobNumber.trim().toLowerCase(), j])),
     [jobs],
   );
   const job = fixed ?? byNumber.get(jobNumber.trim().toLowerCase());
+
+  // Pick sensible defaults for the chosen job
+  const chooseAttribution = (v: DamageAttribution) => {
+    setAttributedTo(v);
+    clear("attributedTo");
+    if (v === "carrier") {
+      if (!carrierId && job?.carrierId) setCarrierId(job.carrierId);
+    } else if (!driverId && job?.crew[0]) {
+      setDriverId(job.crew[0].id);
+    }
+  };
 
   const clear = (k: string) =>
     errors[k] && setErrors((e) => ({ ...e, [k]: "" }));
@@ -90,6 +125,12 @@ export function AdminDamageForm({
       photos,
       claimFiled: claim === "" ? undefined : claim === "yes",
       estimatedCost: cost === "" ? undefined : Number(cost),
+      reportedOn,
+      reportedBy,
+      attributedTo,
+      attributedDriverId:
+        attributedTo && attributedTo !== "carrier" ? driverId : undefined,
+      carrierId: attributedTo === "carrier" ? carrierId : undefined,
     };
 
     const check = adminDamageSchema.safeParse(payload);
@@ -118,7 +159,11 @@ export function AdminDamageForm({
           setFormError(res.error);
           return;
         }
-        toast.success("Damage added. It now counts in the driver's stats.");
+        toast.success(
+          attributedTo === "carrier"
+            ? "Damage added. It now counts in the carrier's score."
+            : "Damage added. It now counts in the driver's stats.",
+        );
         router.push(`/admin/jobs/${res.jobId}`);
       } catch (err) {
         setFormError(
@@ -132,15 +177,14 @@ export function AdminDamageForm({
 
   return (
     <form onSubmit={onSubmit} className="space-y-5" noValidate>
-      {job?.partner && (
-        <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-          <p>
-            This job was delivered by a partner. The damage is recorded but
-            won&apos;t count against the driver&apos;s damage rate.
-          </p>
-        </div>
-      )}
+      <div className="flex items-start gap-3 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
+        <Headset className="mt-0.5 h-4 w-4 shrink-0" />
+        <p>
+          This damage will be tagged <b>Reported by customer service</b>, so
+          it&apos;s easy to tell apart from damage logged by the crew. It counts
+          against the driver or carrier you attribute it to.
+        </p>
+      </div>
 
       <FormError message={formError} />
 
@@ -219,6 +263,121 @@ export function AdminDamageForm({
         </Field>
       </FormSection>
 
+      <FormSection title="Report">
+        <div className="grid gap-5 sm:grid-cols-2">
+          <Field
+            label="Date reported"
+            htmlFor="reportedOn"
+            error={errors.reportedOn}
+          >
+            <Input
+              id="reportedOn"
+              type="date"
+              value={reportedOn}
+              onChange={(e) => {
+                setReportedOn(e.target.value);
+                clear("reportedOn");
+              }}
+              aria-invalid={!!errors.reportedOn}
+              className="h-12 bg-white text-base"
+            />
+          </Field>
+          <Field
+            label="Reported by"
+            htmlFor="reportedBy"
+            error={errors.reportedBy}
+          >
+            <NativeSelect
+              id="reportedBy"
+              value={reportedBy}
+              onChange={(e) => {
+                setReportedBy(e.target.value);
+                clear("reportedBy");
+              }}
+              aria-invalid={!!errors.reportedBy}
+            >
+              <option value="">Select the admin</option>
+              {admins.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
+              ))}
+            </NativeSelect>
+          </Field>
+        </div>
+      </FormSection>
+
+      <FormSection
+        title="Attributed to"
+        description="Who this damage counts against."
+      >
+        <Field label="Attributed to" error={errors.attributedTo}>
+          <Segmented
+            ariaLabel="Attributed to"
+            value={attributedTo}
+            onChange={(v) => v && chooseAttribution(v)}
+            options={(
+              Object.keys(DAMAGE_ATTRIBUTION_LABELS) as DamageAttribution[]
+            ).map((k): { value: DamageAttribution | ""; label: string } => ({
+              value: k,
+              label: DAMAGE_ATTRIBUTION_LABELS[k],
+            }))}
+          />
+        </Field>
+        {attributedTo && attributedTo !== "carrier" && (
+          <Field
+            label={
+              attributedTo === "pickup" ? "Pickup driver" : "Delivery driver"
+            }
+            htmlFor="attributedDriverId"
+            error={errors.attributedDriverId}
+            hint={job ? undefined : "Choose the job first"}
+          >
+            <NativeSelect
+              id="attributedDriverId"
+              value={driverId}
+              onChange={(e) => {
+                setDriverId(e.target.value);
+                clear("attributedDriverId");
+              }}
+              aria-invalid={!!errors.attributedDriverId}
+            >
+              <option value="">Select the driver</option>
+              {(job?.crew ?? []).map((c, i) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                  {i === 0 ? " (driver)" : " (crew)"}
+                </option>
+              ))}
+            </NativeSelect>
+          </Field>
+        )}
+        {attributedTo === "carrier" && (
+          <Field
+            label="Partner carrier"
+            htmlFor="carrierId"
+            error={errors.carrierId}
+          >
+            <NativeSelect
+              id="carrierId"
+              value={carrierId}
+              onChange={(e) => {
+                setCarrierId(e.target.value);
+                clear("carrierId");
+              }}
+              aria-invalid={!!errors.carrierId}
+            >
+              <option value="">Choose the carrier</option>
+              {carriers.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </NativeSelect>
+          </Field>
+        )}
+      </FormSection>
+
       <FormSection title="What was damaged">
         <Field label="Item" htmlFor="item" error={errors.item}>
           <Input
@@ -252,7 +411,10 @@ export function AdminDamageForm({
         </Field>
       </FormSection>
 
-      <FormSection title="Photos" description="Optional, up to 5.">
+      <FormSection
+        title="Photos"
+        description={`Optional, up to ${MAX_ADMIN_DAMAGE_PHOTOS}.`}
+      >
         <Field label="Damage photos" error={errors.photos}>
           <PhotoPicker
             value={photos}
@@ -260,6 +422,7 @@ export function AdminDamageForm({
               setPhotos(p);
               clear("photos");
             }}
+            max={MAX_ADMIN_DAMAGE_PHOTOS}
             invalid={!!errors.photos}
           />
         </Field>

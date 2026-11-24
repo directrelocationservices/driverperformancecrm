@@ -42,6 +42,23 @@ const BASE_COLS: {
     fmt: (r) => (r.booked ? formatCurrency(Math.round(r.cpa)) : "—"),
     lowerIsBetter: true,
   },
+  {
+    key: "positivePerBooked",
+    label: "Good reviews / booked",
+    fmt: (r) =>
+      r.booked && r.positiveReviews != null
+        ? `${(r.positivePerBooked ?? 0).toFixed(2)} (${r.positiveReviews})`
+        : "—",
+  },
+  {
+    key: "negativePerBooked",
+    label: "Bad reviews / booked",
+    fmt: (r) =>
+      r.booked && r.negativeReviews != null
+        ? `${(r.negativePerBooked ?? 0).toFixed(2)} (${r.negativeReviews})`
+        : "—",
+    lowerIsBetter: true,
+  },
   { key: "revenue", label: "Revenue", fmt: (r) => formatCurrency(r.revenue) },
 ];
 

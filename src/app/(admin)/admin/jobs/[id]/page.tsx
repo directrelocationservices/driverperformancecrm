@@ -21,6 +21,7 @@ import {
   Lock,
   MapPin,
   MessageSquare,
+  Headset,
   Package,
   PackageCheck,
   Pencil,
@@ -36,6 +37,7 @@ import {
   getCarriers,
   getJobDetail,
   getUsers,
+  getRepForJobNumber,
 } from "@/lib/data";
 import { ClaimStatusPill } from "@/components/carriers/claim-status-pill";
 import { ACTION_LABELS, diffLines } from "@/lib/audit";
@@ -57,7 +59,9 @@ import { JobStatusForm } from "@/components/admin/job-status-form";
 import { JobDocuments } from "@/components/admin/job-documents";
 import { OffloadCard } from "@/components/shared/offload-card";
 import { OffloadAdmin } from "@/components/admin/offload-admin";
+import { ReviewAttribution } from "@/components/admin/review-attribution";
 import {
+  DAMAGE_ATTRIBUTION_LABELS,
   DAMAGE_SOURCE_LABELS,
   REVIEW_PLATFORM_LABELS,
   UPSELL_TYPE_LABELS,
@@ -149,8 +153,13 @@ function HistoryList({
                     <span className="font-medium text-foreground">
                       {d.field}:
                     </span>{" "}
-                    <span className="line-through">{d.from}</span> →{" "}
-                    <span className="text-foreground">{d.to}</span>
+                    <span className="line-through">
+                      {names[d.from] ?? d.from}
+                    </span>{" "}
+                    →{" "}
+                    <span className="text-foreground">
+                      {names[d.to] ?? d.to}
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -194,12 +203,20 @@ export default async function AdminJobDetail({
   const job = await getJobDetail(id, { includeDeleted: showDeleted });
   if (!job) notFound();
 
-  const [users, audit, carriers, claims] = await Promise.all([
+  const [users, audit, carriers, claims, suggestedRepId] = await Promise.all([
     getUsers(),
     getAuditLog({ jobId: id }),
     getCarriers(),
     getCarrierClaims({ jobId: id }),
+    getRepForJobNumber(job.jobNumber),
   ]);
+  const repOptions = users
+    .filter(
+      (u) =>
+        u.role === "sales_rep" &&
+        (u.active || job.reviews.some((r) => r.repId === u.id)),
+    )
+    .map((u) => ({ id: u.id, name: u.name }));
   const carrierOptions = carriers
     .filter((c) => c.active || c.id === job.carrierId)
     .map((c) => ({ id: c.id, name: c.companyName }));
@@ -588,6 +605,12 @@ export default async function AdminJobDetail({
                   )}
                 </div>
                 <div className="flex flex-wrap items-center gap-1.5">
+                  {d.attributedTo && (
+                    <Pill tone="primary">
+                      <Headset className="h-3 w-3" /> Reported by customer
+                      service
+                    </Pill>
+                  )}
                   {d.source && d.source !== "driver" && (
                     <Pill tone="primary">{DAMAGE_SOURCE_LABELS[d.source]}</Pill>
                   )}
@@ -599,6 +622,27 @@ export default async function AdminJobDetail({
                 </div>
               </div>
               <p className="mt-2 text-[15px]">{d.description}</p>
+              {d.attributedTo && (
+                <div className="mt-3 grid gap-1 rounded-lg bg-sky-50 px-3 py-2.5 text-sm text-sky-950 sm:grid-cols-2">
+                  <p>
+                    <span className="text-sky-900/70">Attributed to: </span>
+                    <b>
+                      {DAMAGE_ATTRIBUTION_LABELS[d.attributedTo]}
+                      {" · "}
+                      {d.attributedTo === "carrier"
+                        ? (carriers.find((c) => c.id === d.carrierId)
+                            ?.companyName ?? "Carrier")
+                        : (names[d.attributedDriverId ?? ""] ?? "Driver")}
+                    </b>
+                  </p>
+                  <p>
+                    <span className="text-sky-900/70">Reported: </span>
+                    {d.reportedOn ? formatDate(d.reportedOn) : "—"}
+                    {" by "}
+                    {names[d.reportedBy ?? ""] ?? "admin"}
+                  </p>
+                </div>
+              )}
               {d.photos.length > 0 && (
                 <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-5">
                   {d.photos.map((src, i) => (
@@ -645,6 +689,7 @@ export default async function AdminJobDetail({
                   by {names[d.createdBy ?? ""] ?? "Unknown"} ·{" "}
                   {formatDateTimeET(d.createdAt)}
                   {job.deliveredBy === "partner" &&
+                    !d.attributedTo &&
                     " · Partner delivery, not counted in damage rate"}
                 </p>
                 <div className="flex flex-wrap items-start justify-end gap-2">
@@ -667,7 +712,19 @@ export default async function AdminJobDetail({
       </Section>
 
       {/* Reviews */}
-      <Section title="Reviews" icon={Star} count={job.reviews.length}>
+      <Section
+        title="Reviews"
+        icon={Star}
+        count={job.reviews.length}
+        action={
+          <Link
+            href={`/admin/jobs/${job.id}/review/new`}
+            className="flex h-9 items-center gap-1.5 rounded-lg border bg-white px-3 text-sm font-semibold transition hover:border-foreground/30"
+          >
+            <Plus className="h-4 w-4" /> Add review
+          </Link>
+        }
+      >
         <div className="divide-y">
           {job.reviews.map((r) => (
             <div
@@ -682,8 +739,23 @@ export default async function AdminJobDetail({
                   <p className="font-semibold">
                     {REVIEW_PLATFORM_LABELS[r.platform]}
                   </p>
+                  {r.repId && (
+                    <Pill tone="primary">
+                      Sales rep: {names[r.repId] ?? "Rep"}
+                    </Pill>
+                  )}
+                  {r.countsForDriver === false && (
+                    <Pill tone="neutral">Not counted for driver</Pill>
+                  )}
+                  {r.addedByAdmin && <Pill tone="neutral">Added by admin</Pill>}
                   <DeletedPill at={r.deletedAt} />
                 </div>
+                {r.reason && (
+                  <p className="mt-1 text-sm">
+                    <span className="text-muted-foreground">Reason: </span>
+                    {r.reason}
+                  </p>
+                )}
                 <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
                   <Stars value={r.stars} />
                   <span>
@@ -711,7 +783,15 @@ export default async function AdminJobDetail({
                   )}
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                {!r.deletedAt && (
+                  <ReviewAttribution
+                    review={r}
+                    reps={repOptions}
+                    driverName={names[job.driverId] ?? "driver"}
+                    suggestedRepId={suggestedRepId}
+                  />
+                )}
                 {!r.deletedAt && (
                   <VerifyToggle kind="review" id={r.id} verified={r.verified} />
                 )}
@@ -721,6 +801,11 @@ export default async function AdminJobDetail({
                   deleted={!!r.deletedAt}
                 />
               </div>
+              {historyFor(r.id).length > 0 && (
+                <div className="basis-full">
+                  <HistoryList entries={historyFor(r.id)} names={names} />
+                </div>
+              )}
             </div>
           ))}
         </div>
