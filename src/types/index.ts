@@ -482,10 +482,101 @@ export interface WashStatus {
   daysLeft: number; // negative when overdue
 }
 
-export type CheckItemKey =
-  "tires" | "fluids" | "lights" | "brakes" | "mirrors" | "equipment";
+/** Checklist item key (the daily items are set in Settings, so any text) */
+export type CheckItemKey = string;
+/** ok = "Yes", attention = "No" */
 export type CheckStatus = "ok" | "attention";
 
+/** One daily pre-trip item, as set in Admin → Settings */
+export interface ChecklistItem {
+  key: string;
+  label: string;
+  hint?: string;
+  /** "No" holds the trip until an admin clears it */
+  blocksTrip: boolean;
+  /** "No" opens a maintenance ticket */
+  ticket: boolean;
+  /** "No" counts against the driver score */
+  scored: boolean;
+}
+
+/** The 9 roadside-ready daily items (used if Settings can't be read) */
+export const DEFAULT_CHECKLIST: ChecklistItem[] = [
+  {
+    key: "logs",
+    label: "Logs current, plus 8 days of blank paper log sheets",
+    hint: "Logs are up to date and 8 days of blank paper log sheets are in the truck",
+    blocksTrip: true,
+    ticket: false,
+    scored: true,
+  },
+  {
+    key: "safety_kit",
+    label: "Fire extinguisher charged and mounted, plus 3 warning triangles",
+    hint: "Gauge in the green, mounted, and 3 triangles in the truck",
+    blocksTrip: true,
+    ticket: false,
+    scored: true,
+  },
+  {
+    key: "shipping_papers",
+    label: "Bill of lading and inventory for every shipment",
+    hint: "And weight tickets when needed",
+    blocksTrip: false,
+    ticket: false,
+    scored: true,
+  },
+  {
+    key: "brake_leaks",
+    label: "Brakes: no leaks",
+    hint: "No air or fluid leaks",
+    blocksTrip: false,
+    ticket: true,
+    scored: false,
+  },
+  {
+    key: "all_lights",
+    label: "All lights working",
+    hint: "Head, tail, brake, turn signals and markers",
+    blocksTrip: false,
+    ticket: true,
+    scored: false,
+  },
+  {
+    key: "tires_wheels",
+    label: "Tires and wheels",
+    hint: "Good tread, no damage, no loose or missing lug nuts",
+    blocksTrip: false,
+    ticket: true,
+    scored: false,
+  },
+  {
+    key: "cab_glass",
+    label: "Windshield, wipers, mirrors, horn, seatbelt",
+    hint: "No cracks, everything works",
+    blocksTrip: false,
+    ticket: true,
+    scored: false,
+  },
+  {
+    key: "fuel_leaks",
+    label: "No fuel, oil or exhaust leaks",
+    hint: "Under the truck and around the engine",
+    blocksTrip: false,
+    ticket: true,
+    scored: false,
+  },
+  {
+    key: "load_doors",
+    label: "Load secured, and doors latching",
+    hint: "Straps and load bars in place, every door latches",
+    blocksTrip: false,
+    ticket: false,
+    scored: true,
+  },
+];
+
+/** The old 6 items (pre-trips saved before the roadside checklist) */
 export const CHECK_ITEMS: { key: CheckItemKey; label: string; hint: string }[] =
   [
     {
@@ -518,9 +609,23 @@ export const CHECK_ITEMS: { key: CheckItemKey; label: string; hint: string }[] =
 
 export interface PreTripItem {
   key: CheckItemKey;
+  /** Item name when it was checked (empty on old pre-trips) */
+  label?: string;
   status: CheckStatus;
   notes?: string;
   photos: string[];
+  /** "No" on this item held the trip */
+  blocks?: boolean;
+  /** "No" on this item counts against the driver */
+  scored?: boolean;
+}
+
+/** A trip hold from a "No" on a blocking item */
+export interface PreTripHold {
+  blocked: boolean;
+  clearedAt: string | null;
+  clearedBy: string | null;
+  clearNote: string | null;
 }
 
 export interface PreTripInspection {
@@ -543,6 +648,7 @@ export interface PreTripInspection {
   washed: boolean;
   washPhotoUrl: string | null;
   washReceiptUrl: string | null;
+  hold: PreTripHold;
 }
 
 export type TicketStatus = "open" | "in_progress" | "fixed";
@@ -559,6 +665,8 @@ export interface MaintenanceTicket {
   inspectionId: string;
   driverId: string;
   itemKey: CheckItemKey;
+  /** Item name when the ticket was opened */
+  itemLabel?: string;
   notes?: string;
   photos: string[];
   severity: TruckStatus;
@@ -571,10 +679,13 @@ export interface MaintenanceTicket {
 }
 
 /** Ticket / check item name. "general" = truck marked Repair soon / Do not drive with no item flagged */
-export const ticketItemLabel = (key: string) =>
-  key === "general"
+export const ticketItemLabel = (key: string, label?: string | null) =>
+  label ||
+  (key === "general"
     ? "Truck status"
-    : (CHECK_ITEMS.find((c) => c.key === key)?.label ?? key);
+    : (DEFAULT_CHECKLIST.find((c) => c.key === key)?.label ??
+      CHECK_ITEMS.find((c) => c.key === key)?.label ??
+      key));
 
 export type RoadsideResult = "clean" | "violations" | "out_of_service";
 
@@ -607,10 +718,12 @@ export interface ScoringSettings {
   washIntervalDays: number;
   /** Points for each overdue wash (0 or less) */
   overdueWash: number;
+  /** Points for each pre-trip "No" on a scored item (0 or less). Default -2. */
+  preTripNo?: number;
 }
 
 export interface ScoreLine {
-  key: RoadsideResult | "overdue_wash";
+  key: RoadsideResult | "overdue_wash" | "pre_trip_no";
   label: string;
   count: number;
   points: number;
@@ -621,6 +734,135 @@ export interface DriverScore {
   base: number;
   score: number;
   lines: ScoreLine[];
+}
+
+/* ---------- Roadside inspection readiness ---------- */
+export type TruckDocType =
+  | "registration"
+  | "insurance"
+  | "annual_inspection"
+  | "eld_manual"
+  | "eld_officer"
+  | "eld_malfunction"
+  | "other";
+export type DriverDocType = "medical_card" | "license";
+export type DocType = TruckDocType | DriverDocType;
+
+export const DOC_TYPE_LABELS: Record<DocType, string> = {
+  registration: "Registration",
+  insurance: "Proof of insurance",
+  annual_inspection: "Annual DOT inspection report",
+  eld_manual: "ELD user manual",
+  eld_officer: "ELD: sending logs to an officer",
+  eld_malfunction: "ELD malfunction instructions",
+  other: "Other document",
+  medical_card: "DOT medical card",
+  license: "Driver's license",
+};
+
+export const TRUCK_DOC_TYPES: TruckDocType[] = [
+  "registration",
+  "insurance",
+  "annual_inspection",
+  "eld_manual",
+  "eld_officer",
+  "eld_malfunction",
+  "other",
+];
+export const DRIVER_DOC_TYPES: DriverDocType[] = ["medical_card", "license"];
+
+/** These need an expiry date; an expired one blocks the trip */
+export const EXPIRING_DOC_TYPES: DocType[] = [
+  "registration",
+  "insurance",
+  "annual_inspection",
+  "medical_card",
+  "license",
+];
+
+export interface DocFile {
+  path: string;
+  name: string;
+  url: string;
+  isPdf: boolean;
+}
+
+export interface FleetDocument {
+  id: string;
+  truckId: string | null;
+  driverId: string | null;
+  docType: DocType;
+  /** Name of an "Other" document */
+  title?: string;
+  /** Driver documents: [front, back] */
+  files: DocFile[];
+  /** YYYY-MM-DD */
+  expiresOn: string | null;
+  uploadedBy: string | null;
+  createdAt: string;
+}
+
+export type ExpiryState = "ok" | "expiring" | "expired" | "missing";
+
+/** One required document of a truck or driver and where it stands */
+export interface DocStatus {
+  docType: DocType;
+  label: string;
+  doc: FleetDocument | null;
+  state: ExpiryState;
+  /** Days until it expires (negative = days since) */
+  days: number | null;
+}
+
+/** Why a driver can't start a trip right now */
+export interface TripBlock {
+  kind: "driver_doc" | "truck_doc" | "hold";
+  message: string;
+  /** Pre-trip with the hold (kind = "hold") */
+  preTripId?: string;
+}
+
+export interface MonthlyCheckItemDef {
+  key: string;
+  label: string;
+  hint: string;
+}
+
+/** The monthly truck check: 3 items, one photo each */
+export const MONTHLY_CHECK_ITEMS: MonthlyCheckItemDef[] = [
+  {
+    key: "dot_markings",
+    label: "Company name and USDOT number on both sides, readable",
+    hint: "Check both doors. Letters must be clear and easy to read.",
+  },
+  {
+    key: "inspection_decal",
+    label: "Annual inspection decal on the truck",
+    hint: "The decal from the latest annual DOT inspection.",
+  },
+  {
+    key: "rear_guard",
+    label: "Rear impact guard in place and undamaged",
+    hint: "The bar under the back of the truck. No bends or cracks.",
+  },
+];
+
+export interface MonthlyCheckItem {
+  key: string;
+  label: string;
+  status: CheckStatus;
+  notes?: string;
+  photoUrl: string;
+}
+
+export interface MonthlyCheck {
+  id: string;
+  truckId: string;
+  driverId: string;
+  items: MonthlyCheckItem[];
+  notes?: string;
+  capturedAtDevice: string;
+  receivedAtServer: string;
 }
 
 /* ---------- Carriers (partner companies) ---------- */

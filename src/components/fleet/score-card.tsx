@@ -74,8 +74,9 @@ export function ScoreCard({
 
       <p className="flex items-center gap-2 border-t bg-muted/30 px-5 py-3 text-xs text-muted-foreground">
         <ShieldCheck className="h-4 w-4 shrink-0 text-green-600" /> Reporting
-        truck problems in pre-trip checks never lowers the score. Overdue washes
-        count against the driver assigned to the truck.
+        truck problems (brakes, lights, tires, leaks) never lowers the score. A
+        pre-trip &quot;No&quot; on logs, safety kit, paperwork or load does.
+        Overdue washes count against the driver assigned to the truck.
       </p>
     </section>
   );

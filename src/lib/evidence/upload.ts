@@ -311,3 +311,39 @@ export async function uploadRoadsideReport(
   }
   throw new UploadRejectedError("Upload a PDF or a photo.");
 }
+
+/* ---------- Truck and driver documents (online only) ---------- */
+/** Uploads one document file (PDF or photo) to docs/<user_id>/ and returns where it was saved */
+export async function uploadFleetDocument(file: File): Promise<UploadedReport> {
+  const uid = await currentUserId();
+  const id = crypto.randomUUID();
+
+  if (file.type === "application/pdf") {
+    const path = await putFile(
+      FLEET_BUCKET,
+      fleetPath("docs", uid, `${id}.pdf`),
+      file,
+    );
+    return { name: file.name, type: "pdf", path };
+  }
+  if (file.type.startsWith("image/")) {
+    const dataUrl = await compressImage(file);
+    const path = await uploadDataUrl(
+      FLEET_BUCKET,
+      fleetPath("docs", uid, id),
+      dataUrl,
+    );
+    return { name: file.name, type: "image", path, preview: dataUrl };
+  }
+  throw new UploadRejectedError("Upload a PDF or a photo.");
+}
+
+/** Uploads a photo taken in the app (data URL) to <kind>/<user_id>/<name> */
+export async function uploadFleetPhoto(
+  kind: "docs" | "monthly",
+  name: string,
+  dataUrl: string,
+): Promise<string> {
+  const uid = await currentUserId();
+  return uploadDataUrl(FLEET_BUCKET, fleetPath(kind, uid, name), dataUrl);
+}

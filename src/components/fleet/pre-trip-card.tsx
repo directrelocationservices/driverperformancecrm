@@ -1,5 +1,8 @@
+// File: src/components/fleet/pre-trip-card.tsx
+// (REPLACE the whole file)
+
 import Link from "next/link";
-import { AlertTriangle, ChevronRight } from "lucide-react";
+import { AlertTriangle, Ban, ChevronRight } from "lucide-react";
 import { formatDateTimeET } from "@/lib/format";
 import type { PreTripInspection } from "@/types";
 import { TruckStatusPill } from "./status-badges";
@@ -37,9 +40,14 @@ export function PreTripCard({
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <TruckStatusPill status={inspection.truckStatus} />
+        {inspection.hold.blocked && !inspection.hold.clearedAt && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-700">
+            <Ban className="h-3.5 w-3.5" /> Trip on hold
+          </span>
+        )}
         {flagged > 0 ? (
           <span className="inline-flex items-center gap-1 text-sm font-medium text-amber-700">
-            <AlertTriangle className="h-4 w-4" /> {flagged} flagged
+            <AlertTriangle className="h-4 w-4" /> {flagged} &quot;No&quot;
           </span>
         ) : (
           <span className="text-sm text-muted-foreground">All items OK</span>

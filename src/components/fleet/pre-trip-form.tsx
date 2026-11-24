@@ -6,6 +6,7 @@
 import { useState, useTransition } from "react";
 import {
   AlertTriangle,
+  Ban,
   Check,
   Loader2,
   Lock,
@@ -13,6 +14,7 @@ import {
   Plus,
   RefreshCw,
   ShieldCheck,
+  X,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
@@ -28,9 +30,9 @@ import { PhotoSlot } from "./photo-slot";
 import { useGeolocation } from "@/hooks/use-geolocation";
 import { createPreTripAction } from "@/app/(driver)/driver/fleet-actions";
 import {
-  CHECK_ITEMS,
   CONDITION_PHOTOS,
-  type CheckItemKey,
+  DEFAULT_CHECKLIST,
+  type ChecklistItem,
   type ConditionPhotoKey,
   type CheckStatus,
   type TruckStatus,
@@ -81,7 +83,17 @@ type TruckOption = {
   status: TruckStatus;
 };
 
-export function PreTripForm({ trucks }: { trucks: TruckOption[] }) {
+export function PreTripForm({
+  trucks,
+  items: checklist = DEFAULT_CHECKLIST,
+  blockedTrucks = {},
+}: {
+  trucks: TruckOption[];
+  /** The daily checklist from Settings */
+  items?: ChecklistItem[];
+  /** Trucks that can't be used now, with the reasons */
+  blockedTrucks?: Record<string, string[]>;
+}) {
   const geo = useGeolocation();
   const [pending, startTransition] = useTransition();
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -89,13 +101,13 @@ export function PreTripForm({ trucks }: { trucks: TruckOption[] }) {
 
   const [truckId, setTruckId] = useState("");
   const [odometer, setOdometer] = useState("");
-  const [items, setItems] = useState<Record<CheckItemKey, ItemState>>(() =>
-    CHECK_ITEMS.reduce(
+  const [items, setItems] = useState<Record<string, ItemState>>(() =>
+    checklist.reduce(
       (result, c) => {
         result[c.key] = { status: "", notes: "", photos: [], open: false };
         return result;
       },
-      {} as Record<CheckItemKey, ItemState>,
+      {} as Record<string, ItemState>,
     ),
   );
   const [condition, setCondition] = useState<
@@ -116,7 +128,7 @@ export function PreTripForm({ trucks }: { trucks: TruckOption[] }) {
 
   const clear = (k: string) =>
     errors[k] && setErrors((e) => ({ ...e, [k]: "" }));
-  const setItem = (key: CheckItemKey, patch: Partial<ItemState>) =>
+  const setItem = (key: string, patch: Partial<ItemState>) =>
     setItems((s) => ({ ...s, [key]: { ...s[key], ...patch } }));
 
   const conditionDone = CONDITION_PHOTOS.filter((c) => condition[c.key]).length;
@@ -124,9 +136,12 @@ export function PreTripForm({ trucks }: { trucks: TruckOption[] }) {
     (c) => errors[`conditionPhotos.${c.key}`],
   );
 
-  const flagged = CHECK_ITEMS.filter(
-    (c) => items[c.key].status === "attention",
+  const flagged = checklist.filter(
+    (c) => items[c.key]?.status === "attention",
   ).length;
+  const holding = checklist.filter(
+    (c) => c.blocksTrip && items[c.key]?.status === "attention",
+  );
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -134,7 +149,7 @@ export function PreTripForm({ trucks }: { trucks: TruckOption[] }) {
     const payload = {
       truckId,
       odometer: odometer === "" ? undefined : Number(odometer),
-      items: CHECK_ITEMS.map((c) => ({
+      items: checklist.map((c) => ({
         key: c.key,
         status: items[c.key].status || undefined,
         notes: items[c.key].notes.trim() || undefined,
@@ -234,19 +249,23 @@ export function PreTripForm({ trucks }: { trucks: TruckOption[] }) {
           <div className="grid gap-2 sm:grid-cols-2">
             {trucks.map((t) => {
               const active = truckId === t.id;
+              const blocked = blockedTrucks[t.id];
               return (
                 <button
                   key={t.id}
                   type="button"
+                  disabled={!!blocked}
                   onClick={() => {
                     setTruckId(t.id);
                     clear("truckId");
                   }}
                   className={cn(
                     "flex items-start justify-between gap-3 rounded-xl border-2 bg-white p-4 text-left transition",
-                    active
-                      ? "border-primary bg-primary/5"
-                      : "border-transparent ring-1 ring-border hover:ring-foreground/30",
+                    blocked
+                      ? "cursor-not-allowed border-transparent bg-red-50/50 opacity-80 ring-1 ring-red-200"
+                      : active
+                        ? "border-primary bg-primary/5"
+                        : "border-transparent ring-1 ring-border hover:ring-foreground/30",
                   )}
                 >
                   <div className="min-w-0">
@@ -261,6 +280,12 @@ export function PreTripForm({ trucks }: { trucks: TruckOption[] }) {
                     <div className="mt-2">
                       <TruckStatusPill status={t.status} />
                     </div>
+                    {blocked && (
+                      <p className="mt-2 flex items-start gap-1.5 text-sm font-medium text-red-700">
+                        <Ban className="mt-0.5 h-4 w-4 shrink-0" />
+                        {blocked.join(". ")}
+                      </p>
+                    )}
                   </div>
                   <span
                     className={cn(
@@ -420,14 +445,15 @@ export function PreTripForm({ trucks }: { trucks: TruckOption[] }) {
 
       {/* Checklist */}
       <FormSection
-        title="Checklist"
-        description="Mark each item. Add a note and photo for anything that needs attention."
+        title="Daily checklist"
+        description='Answer Yes or No for every item. "No" needs a note and a photo, and admin is alerted right away.'
       >
         <div className="space-y-3">
-          {CHECK_ITEMS.map((c, i) => {
+          {checklist.map((c, i) => {
             const it = items[c.key];
             const statusErr = errors[`items.${i}.status`];
             const notesErr = errors[`items.${i}.notes`];
+            const photosErr = errors[`items.${i}.photos`];
             const showDetails = it.status === "attention" || it.open;
             return (
               <div
@@ -435,15 +461,30 @@ export function PreTripForm({ trucks }: { trucks: TruckOption[] }) {
                 className={cn(
                   "rounded-xl border bg-white p-4",
                   it.status === "attention" &&
-                    "border-amber-300 bg-amber-50/40",
+                    (c.blocksTrip
+                      ? "border-red-300 bg-red-50/40"
+                      : "border-amber-300 bg-amber-50/40"),
                   it.status === "ok" && "border-green-200",
                   statusErr && "border-destructive",
                 )}
               >
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="min-w-0 flex-1">
-                    <p className="font-semibold">{c.label}</p>
-                    <p className="text-sm text-muted-foreground">{c.hint}</p>
+                    <p className="font-semibold">
+                      <span className="mr-1.5 text-muted-foreground">
+                        {i + 1}.
+                      </span>
+                      {c.label}
+                    </p>
+                    {c.hint && (
+                      <p className="text-sm text-muted-foreground">{c.hint}</p>
+                    )}
+                    {c.blocksTrip && (
+                      <p className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-red-700">
+                        <Ban className="h-3.5 w-3.5" /> &quot;No&quot; puts the
+                        trip on hold until an admin clears it
+                      </p>
+                    )}
                   </div>
                   <div className="flex gap-2 sm:shrink-0">
                     <button
@@ -453,13 +494,13 @@ export function PreTripForm({ trucks }: { trucks: TruckOption[] }) {
                         clear(`items.${i}.status`);
                       }}
                       className={cn(
-                        "flex h-12 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border px-5 text-[15px] font-semibold transition sm:flex-none",
+                        "flex h-12 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border px-6 text-[15px] font-semibold transition sm:flex-none",
                         it.status === "ok"
                           ? "border-green-600 bg-green-600 text-white"
                           : "bg-white text-foreground/80 hover:border-green-400",
                       )}
                     >
-                      <Check className="h-4 w-4 shrink-0" /> OK
+                      <Check className="h-4 w-4 shrink-0" /> Yes
                     </button>
                     <button
                       type="button"
@@ -468,14 +509,15 @@ export function PreTripForm({ trucks }: { trucks: TruckOption[] }) {
                         clear(`items.${i}.status`);
                       }}
                       className={cn(
-                        "flex h-12 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border px-4 text-[15px] font-semibold transition sm:flex-none",
+                        "flex h-12 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border px-6 text-[15px] font-semibold transition sm:flex-none",
                         it.status === "attention"
-                          ? "border-amber-500 bg-amber-500 text-white"
+                          ? c.blocksTrip
+                            ? "border-red-600 bg-red-600 text-white"
+                            : "border-amber-500 bg-amber-500 text-white"
                           : "bg-white text-foreground/80 hover:border-amber-400",
                       )}
                     >
-                      <AlertTriangle className="h-4 w-4 shrink-0" /> Needs
-                      attention
+                      <X className="h-4 w-4 shrink-0" /> No
                     </button>
                   </div>
                 </div>
@@ -488,7 +530,7 @@ export function PreTripForm({ trucks }: { trucks: TruckOption[] }) {
                 {showDetails ? (
                   <div className="mt-4 space-y-4 border-t pt-4">
                     <Field
-                      label="Notes"
+                      label="Note"
                       htmlFor={`n-${c.key}`}
                       error={notesErr}
                       optional={it.status !== "attention"}
@@ -509,10 +551,17 @@ export function PreTripForm({ trucks }: { trucks: TruckOption[] }) {
                         className={TEXTAREA_CLASS}
                       />
                     </Field>
-                    <Field label="Photos" optional>
+                    <Field
+                      label="Photo"
+                      error={photosErr}
+                      optional={it.status !== "attention"}
+                    >
                       <PhotoPicker
                         value={it.photos}
-                        onChange={(p) => setItem(c.key, { photos: p })}
+                        onChange={(p) => {
+                          setItem(c.key, { photos: p });
+                          clear(`items.${i}.photos`);
+                        }}
                         max={3}
                       />
                     </Field>
@@ -530,6 +579,14 @@ export function PreTripForm({ trucks }: { trucks: TruckOption[] }) {
             );
           })}
         </div>
+        {holding.length > 0 && (
+          <p className="flex items-start gap-2 rounded-lg bg-red-50 px-3 py-2.5 text-sm font-medium text-red-800">
+            <Ban className="mt-0.5 h-4 w-4 shrink-0" />
+            You answered &quot;No&quot; to{" "}
+            {holding.map((h) => h.label).join(" and ")}. After you submit, the
+            trip is on hold until an admin clears it.
+          </p>
+        )}
       </FormSection>
 
       {/* Status */}
@@ -561,8 +618,8 @@ export function PreTripForm({ trucks }: { trucks: TruckOption[] }) {
         {flagged > 0 && truckStatus === "safe" && (
           <p className="flex items-start gap-2 rounded-lg bg-amber-50 px-3 py-2.5 text-sm text-amber-800">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-            You marked {flagged} item{flagged === 1 ? "" : "s"} as needing
-            attention. Is the truck still safe to drive?
+            You answered &quot;No&quot; to {flagged} item
+            {flagged === 1 ? "" : "s"}. Is the truck still safe to drive?
           </p>
         )}
 
@@ -593,15 +650,15 @@ export function PreTripForm({ trucks }: { trucks: TruckOption[] }) {
         <div className="flex items-start gap-3 rounded-xl bg-green-50 px-4 py-3 text-sm text-green-800">
           <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
           <p>
-            Reporting a problem never lowers your score. It keeps you and the
-            crew safe.
+            Reporting a truck problem (brakes, lights, tires, leaks) never
+            lowers your score. It keeps you and the crew safe.
           </p>
         </div>
         <div className="flex items-start gap-3 rounded-xl bg-secondary px-4 py-3 text-sm text-white">
           <Lock className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
           <p>
             Once submitted, the inspection is time-stamped and can&apos;t be
-            edited. Any flagged item opens a maintenance ticket.
+            edited. A &quot;No&quot; on a truck item opens a maintenance ticket.
           </p>
         </div>
       </div>

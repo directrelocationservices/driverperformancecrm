@@ -37,6 +37,9 @@ const dataPhoto = (label: string) =>
     .string({ message: `Add the ${label} photo` })
     .startsWith("data:image/", `Add the ${label} photo`);
 
+/** Checklist item key (set in Settings). Also used in photo file names. */
+const itemKey = z.string().regex(/^[a-z0-9_]{1,40}$/, "Unknown checklist item");
+
 export const preTripSchema = z
   .object({
     truckId: z.string().min(1, "Choose a truck"),
@@ -48,24 +51,16 @@ export const preTripSchema = z
     items: z
       .array(
         z.object({
-          key: z.enum([
-            "tires",
-            "fluids",
-            "lights",
-            "brakes",
-            "mirrors",
-            "equipment",
-          ]),
-          status: z.enum(["ok", "attention"], {
-            message: "Mark OK or Needs attention",
-          }),
+          key: itemKey,
+          status: z.enum(["ok", "attention"], { message: "Answer Yes or No" }),
           notes: z.string().trim().max(500).optional(),
           photos: z
             .array(z.string().startsWith("data:image/"))
             .max(3, "Up to 3 photos"),
         }),
       )
-      .length(6),
+      .min(1)
+      .max(30),
     conditionPhotos: conditionPhotosSchema(dataPhoto),
     washed: z.boolean({ message: "Answer Yes or No" }),
     washPhoto: z.string().startsWith("data:image/").optional(),
@@ -88,6 +83,13 @@ export const preTripSchema = z
           code: "custom",
           path: ["items", i, "notes"],
           message: "Describe the problem",
+        });
+      }
+      if (it.status === "attention" && !it.photos.length) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["items", i, "photos"],
+          message: "Add a photo",
         });
       }
     });
@@ -145,6 +147,7 @@ export const scoringSchema = z.object({
     .min(1, "At least 1 day")
     .max(365, "Up to 365 days"),
   overdueWash: z.number().int().min(-100).max(0, "Use 0 or a negative number"),
+  preTripNo: z.number().int().min(-100).max(0, "Use 0 or a negative number"),
 });
 
 /* ---------- Server-side pre-trip (photos and signature already uploaded) ---------- */
@@ -166,22 +169,14 @@ export const preTripServerSchema = z
     items: z
       .array(
         z.object({
-          key: z.enum([
-            "tires",
-            "fluids",
-            "lights",
-            "brakes",
-            "mirrors",
-            "equipment",
-          ]),
-          status: z.enum(["ok", "attention"], {
-            message: "Mark OK or Needs attention",
-          }),
+          key: itemKey,
+          status: z.enum(["ok", "attention"], { message: "Answer Yes or No" }),
           notes: z.string().trim().max(500).optional(),
           photos: z.array(storagePath).max(3, "Up to 3 photos"),
         }),
       )
-      .length(6),
+      .min(1)
+      .max(30),
     conditionPhotos: conditionPhotosSchema(storedPhoto),
     washed: z.boolean({ message: "Answer Yes or No" }),
     washPhoto: storagePath.optional(),
@@ -247,3 +242,115 @@ export const assignDriverSchema = z
   .string()
   .regex(/^[0-9a-f-]{36}$/i)
   .nullable();
+
+/* ---------- Daily checklist (Admin → Settings) ---------- */
+export const checklistSchema = z
+  .array(
+    z.object({
+      key: z.string().regex(/^[a-z0-9_]{1,40}$/),
+      label: z.string().trim().min(3, "Enter the item").max(160),
+      hint: z.string().trim().max(200).optional(),
+      blocksTrip: z.boolean(),
+      ticket: z.boolean(),
+      scored: z.boolean(),
+    }),
+  )
+  .min(1, "Keep at least one item")
+  .max(30, "Up to 30 items");
+
+/* ---------- Truck and driver documents ---------- */
+const dateStr = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Choose the date");
+
+export const documentSchema = z
+  .object({
+    truckId: z.string().optional(),
+    driverId: z.string().optional(),
+    docType: z.enum([
+      "registration",
+      "insurance",
+      "annual_inspection",
+      "eld_manual",
+      "eld_officer",
+      "eld_malfunction",
+      "other",
+      "medical_card",
+      "license",
+    ]),
+    title: z.string().trim().max(120).optional(),
+    files: z
+      .array(
+        z.object({
+          path: storagePath,
+          name: z.string().trim().min(1).max(200),
+        }),
+      )
+      .min(1, "Upload the document")
+      .max(2),
+    expiresOn: dateStr.optional(),
+  })
+  .superRefine((d, ctx) => {
+    const driverDoc = d.docType === "medical_card" || d.docType === "license";
+    if (driverDoc && d.files.length !== 2)
+      ctx.addIssue({
+        code: "custom",
+        path: ["files"],
+        message: "Add a photo of the front and the back",
+      });
+    if (
+      [
+        "registration",
+        "insurance",
+        "annual_inspection",
+        "medical_card",
+        "license",
+      ].includes(d.docType) &&
+      !d.expiresOn
+    )
+      ctx.addIssue({
+        code: "custom",
+        path: ["expiresOn"],
+        message: "Enter the expiry date",
+      });
+    if (d.docType === "other" && !d.title)
+      ctx.addIssue({
+        code: "custom",
+        path: ["title"],
+        message: "Name the document",
+      });
+  });
+export type DocumentInput = z.infer<typeof documentSchema>;
+
+/* ---------- Monthly truck check (photos already uploaded) ---------- */
+export const monthlyCheckSchema = z
+  .object({
+    truckId: z.string().min(1, "Choose a truck"),
+    items: z
+      .array(
+        z.object({
+          key: z.string().regex(/^[a-z0-9_]{1,40}$/),
+          status: z.enum(["ok", "attention"], { message: "Answer Yes or No" }),
+          notes: z.string().trim().max(500).optional(),
+          photo: z
+            .string({ message: "Add the photo" })
+            .min(1, "Add the photo")
+            .max(300),
+        }),
+      )
+      .min(1)
+      .max(10),
+    notes: z.string().trim().max(1000).optional(),
+    capturedAtDevice: z.string().min(1),
+    lat: z.number().nullable(),
+    lng: z.number().nullable(),
+  })
+  .superRefine((d, ctx) => {
+    d.items.forEach((it, i) => {
+      if (it.status === "attention" && !it.notes)
+        ctx.addIssue({
+          code: "custom",
+          path: ["items", i, "notes"],
+          message: "Describe the problem",
+        });
+    });
+  });
+export type MonthlyCheckInput = z.infer<typeof monthlyCheckSchema>;

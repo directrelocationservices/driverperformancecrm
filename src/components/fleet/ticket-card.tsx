@@ -43,7 +43,7 @@ export function TicketCard({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [confirmFix, setConfirmFix] = useState(false);
-  const label = ticketItemLabel(ticket.itemKey);
+  const label = ticketItemLabel(ticket.itemKey, ticket.itemLabel);
 
   const move = (status: TicketStatus) =>
     startTransition(async () => {

@@ -25,6 +25,8 @@ import {
   Container,
   Webhook,
   Building2,
+  ShieldCheck,
+  FileText,
 } from "lucide-react";
 
 export type NavItem = { href: string; label: string; icon: LucideIcon };
@@ -60,6 +62,7 @@ export const ADMIN_NAV: NavGroup[] = [
     title: "Fleet",
     items: [
       { href: "/admin/trucks", label: "Trucks", icon: Container },
+      { href: "/admin/readiness", label: "Readiness", icon: ShieldCheck },
       { href: "/admin/maintenance", label: "Maintenance", icon: Wrench },
       { href: "/admin/roadside", label: "Roadside", icon: Siren },
       { href: "/admin/carriers", label: "Carriers", icon: Building2 },
@@ -113,6 +116,7 @@ export const DRIVER_NAV_GROUPS: NavGroup[] = [
         label: "Pre-trip check",
         icon: ClipboardCheck,
       },
+      { href: "/driver/documents", label: "My documents", icon: FileText },
       { href: "/driver/roadside", label: "Roadside inspections", icon: Siren },
     ],
   },

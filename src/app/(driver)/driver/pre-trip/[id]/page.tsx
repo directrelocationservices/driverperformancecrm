@@ -1,8 +1,11 @@
+// File: src/app/(driver)/driver/pre-trip/[id]/page.tsx
+// (REPLACE the whole file)
+
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { requireRole } from "@/lib/auth/session";
-import { getPreTrip, getTickets, getTruck } from "@/lib/data";
+import { getPreTrip, getTickets, getTruck, getUserById } from "@/lib/data";
 import { InspectionDetail } from "@/components/fleet/inspection-detail";
 
 export default async function DriverPreTripDetail({
@@ -15,9 +18,10 @@ export default async function DriverPreTripDetail({
   const inspection = await getPreTrip(id);
   if (!inspection || inspection.driverId !== user.id) notFound();
 
-  const [truck, tickets] = await Promise.all([
+  const [truck, tickets, clearedBy] = await Promise.all([
     getTruck(inspection.truckId),
     getTickets({ inspectionId: id }),
+    inspection.hold.clearedBy ? getUserById(inspection.hold.clearedBy) : null,
   ]);
 
   return (
@@ -33,6 +37,7 @@ export default async function DriverPreTripDetail({
         truck={truck}
         driverName={user.name}
         tickets={tickets}
+        clearedByName={clearedBy?.name}
       />
     </div>
   );

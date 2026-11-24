@@ -2,6 +2,7 @@
 // (REPLACE the whole file)
 
 import Dexie, { type EntityTable } from "dexie";
+import type { ChecklistItem } from "@/types";
 
 export type OutboxType =
   | "job"
@@ -65,6 +66,8 @@ export type DriverSnapshot = {
   /** For the offline Offload form */
   carriers?: { id: string; name: string }[];
   offloadForms?: { id: string; name: string; required: boolean }[];
+  /** Daily pre-trip checklist from Settings (older snapshots: the default 9 items) */
+  checklist?: ChecklistItem[];
 };
 
 class OfflineDB extends Dexie {

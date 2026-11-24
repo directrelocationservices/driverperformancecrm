@@ -5,7 +5,13 @@
 
 import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth/session";
-import { createPreTripFor, createRoadsideFor } from "@/lib/services/fleet";
+import { revalidatePath } from "next/cache";
+import {
+  createDocumentFor,
+  createMonthlyCheckFor,
+  createPreTripFor,
+  createRoadsideFor,
+} from "@/lib/services/fleet";
 
 export type FleetResult = {
   error?: string;
@@ -31,4 +37,23 @@ export async function createRoadsideAction(
   const res = await createRoadsideFor(user, input);
   if (!res.ok) return { error: res.error, fieldErrors: res.fieldErrors };
   redirect("/driver/roadside");
+}
+
+/** Driver uploads their own DOT medical card or license (front + back, expiry date) */
+export async function createDriverDocumentAction(
+  input: unknown,
+): Promise<FleetResult> {
+  const user = await requireRole("driver");
+  const res = await createDocumentFor(user, input);
+  if (!res.ok) return { error: res.error, fieldErrors: res.fieldErrors };
+  revalidatePath("/driver/documents");
+}
+
+export async function createMonthlyCheckAction(
+  input: unknown,
+): Promise<FleetResult> {
+  const user = await requireRole("driver");
+  const res = await createMonthlyCheckFor(user, input);
+  if (!res.ok) return { error: res.error, fieldErrors: res.fieldErrors };
+  redirect(`/driver/monthly-check/${res.id}`);
 }

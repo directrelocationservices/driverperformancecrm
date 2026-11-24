@@ -2,7 +2,7 @@
 // (REPLACE the whole file)
 
 import { createAdminClient } from "@/lib/supabase/admin";
-import { CHECK_ITEMS } from "@/types";
+import { ticketItemLabel } from "@/types";
 
 /*
  * Admin email alerts, sent with Resend (https://resend.com).
@@ -149,13 +149,15 @@ export function sendDoNotDriveAlert(input: {
   unitNumber: string;
   driverName: string;
   odometer: number;
-  failedItems: { key: string; notes?: string }[];
+  failedItems: { key: string; label?: string; notes?: string }[];
   notes?: string;
 }) {
-  const label = (k: string) => CHECK_ITEMS.find((c) => c.key === k)?.label ?? k;
   const failed = input.failedItems.length
     ? input.failedItems
-        .map((i) => (i.notes ? `${label(i.key)} (${i.notes})` : label(i.key)))
+        .map((i) => {
+          const label = ticketItemLabel(i.key, i.label);
+          return i.notes ? `${label} (${i.notes})` : label;
+        })
         .join(", ")
     : "No items marked";
 
@@ -333,6 +335,170 @@ export function sendOffloadAlert(input: {
           `<p style="color:#6b7280;font-size:12px">Photo and file links work for 7 days. The job page always has them.</p>`,
         extraText: map ? `Map: ${map}` : undefined,
       },
+    );
+  });
+}
+
+/* ---------- Roadside inspection readiness ---------- */
+/**
+ * Test logins handed to the client and the insurance underwriter. These are
+ * placeholder Gmail addresses, not DRS inboxes, so they never get emails.
+ */
+const TEST_LOGIN_EMAILS = new Set(["admin@gmail.com", "driver@gmail.com"]);
+
+/** Every active admin's email */
+async function getAdminEmails(): Promise<string[]> {
+  const { data, error } = await createAdminClient()
+    .from("profiles")
+    .select("email")
+    .eq("role", "admin")
+    .eq("active", true);
+  if (error) throw error;
+  return (data ?? [])
+    .map((p) => p.email.trim().toLowerCase())
+    .filter((e) => /\S+@\S+\.\S+/.test(e) && !TEST_LOGIN_EMAILS.has(e));
+}
+
+const dayWord = (n: number) => `${n} day${n === 1 ? "" : "s"}`;
+
+/** A truck or driver document expires in 30 days, 7 days, or today (or already expired) */
+export function sendDocExpiryAlert(input: {
+  docLabel: string;
+  owner: string;
+  ownerLink: string;
+  expires: string;
+  days: number;
+  driverEmail: string | null;
+  driverName: string | null;
+  forTruck: boolean;
+}) {
+  return safe(async () => {
+    const admins = await getAdminEmails();
+    const driver = input.driverEmail?.trim().toLowerCase();
+    const to = Array.from(
+      new Set([
+        ...admins,
+        ...(driver && !TEST_LOGIN_EMAILS.has(driver) ? [driver] : []),
+      ]),
+    );
+    if (!to.length) return false;
+    const status =
+      input.days < 0
+        ? `Expired ${dayWord(-input.days)} ago`
+        : input.days === 0
+          ? "Expires today"
+          : `Expires in ${dayWord(input.days)}`;
+    return send(
+      input.days <= 0
+        ? `${input.days < 0 ? "Expired" : "Expires today"}: ${input.docLabel} (${input.owner})`
+        : `${input.docLabel} expires in ${dayWord(input.days)} (${input.owner})`,
+      [
+        [input.forTruck ? "Truck" : "Driver", input.owner],
+        ...(input.forTruck && input.driverName
+          ? ([["Assigned driver", input.driverName]] as [string, string][])
+          : []),
+        ["Document", input.docLabel],
+        ["Expiry date", input.expires],
+        ["Status", status],
+        [
+          "What happens",
+          "Once it expires, the trip is blocked until a new one is uploaded.",
+        ],
+      ],
+      appUrl() ? `${appUrl()}${input.ownerLink}` : "",
+      input.forTruck ? "Open the truck" : "Open the driver",
+      {
+        to,
+        extraText: input.forTruck
+          ? undefined
+          : "Drivers: upload the new one in the app under My documents.",
+        extraHtml: input.forTruck
+          ? undefined
+          : `<p style="margin:0 0 16px;color:#111827;font-size:14px">Drivers: upload the new one in the app under <b>My documents</b>.</p>`,
+      },
+    );
+  });
+}
+
+/** A driver answered "No" on the pre-trip checklist: admins hear right away */
+export function sendPreTripNoAlert(input: {
+  preTripId: string;
+  unitNumber: string;
+  driverName: string;
+  items: { label: string; notes?: string; blocks: boolean }[];
+  photoPaths: string[];
+}) {
+  return safe(async () => {
+    const to = await getAdminEmails();
+    if (!to.length) return false;
+    const { data } = await createAdminClient()
+      .storage.from("fleet")
+      .createSignedUrls(input.photoPaths, 60 * 60 * 24 * 7);
+    const photos = (data ?? [])
+      .map((d) => d.signedUrl)
+      .filter(Boolean)
+      .map(
+        (u, i) =>
+          `<a href="${esc(u!)}"><img src="${esc(u!)}" alt="Photo ${i + 1}" width="160" style="width:160px;height:120px;object-fit:cover;border-radius:6px;margin:0 6px 6px 0;border:1px solid #e5e7eb"></a>`,
+      )
+      .join("");
+    const held = input.items.some((i) => i.blocks);
+    return send(
+      `${held ? "TRIP ON HOLD" : "Pre-trip issue"}: truck ${input.unitNumber} (${input.driverName})`,
+      [
+        ["Truck", input.unitNumber],
+        ["Driver", input.driverName],
+        ...input.items.map(
+          (i) =>
+            [
+              `No: ${i.label}`,
+              `${i.notes || "No note"}${i.blocks ? " (trip on hold)" : ""}`,
+            ] as [string, string],
+        ),
+        ...(held
+          ? ([
+              [
+                "Action",
+                "The trip is blocked until an admin clears it in the portal.",
+              ],
+            ] as [string, string][])
+          : []),
+      ],
+      appUrl() ? `${appUrl()}/admin/pre-trip/${input.preTripId}` : "",
+      "Open the inspection",
+      {
+        to,
+        extraHtml: photos
+          ? `<h3 style="margin:0 0 8px;font-size:15px;color:#111827">Photos</h3><div style="margin-bottom:16px">${photos}</div><p style="color:#6b7280;font-size:12px">Photo links work for 7 days.</p>`
+          : undefined,
+      },
+    );
+  });
+}
+
+/** Monthly truck check with a "No" answer */
+export function sendMonthlyCheckAlert(input: {
+  checkId: string;
+  truckId: string;
+  unitNumber: string;
+  driverName: string;
+  items: { label: string; notes?: string }[];
+}) {
+  return safe(async () => {
+    const to = await getAdminEmails();
+    if (!to.length) return false;
+    return send(
+      `Monthly truck check issue: truck ${input.unitNumber}`,
+      [
+        ["Truck", input.unitNumber],
+        ["Driver", input.driverName],
+        ...input.items.map(
+          (i) => [`No: ${i.label}`, i.notes || "No note"] as [string, string],
+        ),
+      ],
+      appUrl() ? `${appUrl()}/admin/trucks/${input.truckId}#monthly` : "",
+      "Open the truck",
+      { to },
     );
   });
 }

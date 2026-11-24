@@ -5,6 +5,7 @@
 
 import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth/session";
+import { getTripBlocks } from "@/lib/data";
 import {
   createDamageFor,
   createJobFor,
@@ -24,6 +25,9 @@ export type ActionResult = {
 
 export async function createJobAction(input: unknown): Promise<ActionResult> {
   const user = await requireRole("driver");
+  // Expired documents or a trip hold: no new trip until it's fixed
+  const blocks = await getTripBlocks(user.id);
+  if (blocks.length) return { error: blocks.map((b) => b.message).join(" ") };
   const res = await createJobFor(user, input);
   if (!res.ok) return { error: res.error, fieldErrors: res.fieldErrors };
   redirect(`/driver/jobs/${res.id}`);

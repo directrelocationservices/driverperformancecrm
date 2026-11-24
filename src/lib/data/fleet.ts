@@ -41,6 +41,7 @@ const DEFAULT_SCORING: ScoringSettings = {
   outOfService: -25,
   washIntervalDays: 14,
   overdueWash: -5,
+  preTripNo: -2,
 };
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -148,9 +149,12 @@ export async function saveTruck(input: {
    ========================================================= */
 type StoredItem = {
   key: CheckItemKey;
+  label?: string;
   status: CheckStatus;
   notes?: string | null;
   photos?: string[];
+  blocks?: boolean;
+  scored?: boolean;
 };
 type StoredCondition = Partial<Record<ConditionPhotoKey, string>>;
 
@@ -174,6 +178,9 @@ async function toPreTrips(rows: PreTripRow[]): Promise<PreTripInspection[]> {
     driverId: r.driver_id,
     items: itemsOf(r).map((i): PreTripItem => ({
       key: i.key,
+      label: i.label || undefined,
+      blocks: !!i.blocks,
+      scored: !!i.scored,
       status: i.status,
       notes: i.notes ?? undefined,
       photos: (i.photos ?? []).map((p) => signed.get(p) ?? "").filter(Boolean),
@@ -199,6 +206,12 @@ async function toPreTrips(rows: PreTripRow[]): Promise<PreTripInspection[]> {
     washReceiptUrl: r.wash_receipt_path
       ? (signed.get(r.wash_receipt_path) ?? null)
       : null,
+    hold: {
+      blocked: r.blocked,
+      clearedAt: r.cleared_at,
+      clearedBy: r.cleared_by,
+      clearNote: r.clear_note,
+    },
   }));
 }
 
@@ -236,6 +249,7 @@ export async function getPreTrip(
  */
 export async function createPreTrip(input: {
   truckId: string;
+  /** Item names and rules are filled in by the database from Settings */
   items: {
     key: CheckItemKey;
     status: CheckStatus;
@@ -466,6 +480,7 @@ export async function getTickets(
       inspectionId: t.inspection_id,
       driverId: t.driver_id,
       itemKey: t.item_key as CheckItemKey,
+      itemLabel: t.item_label ?? undefined,
       notes: t.notes ?? undefined,
       photos: t.photo_paths.map((p) => signed.get(p) ?? "").filter(Boolean),
       severity: t.severity,
@@ -608,19 +623,39 @@ export function pointsFor(result: RoadsideResult, s: ScoringSettings) {
       : s.outOfService;
 }
 
+/** "No" answers on scored pre-trip items (logs, safety kit, paperwork, load) in the period */
+async function countPreTripNo(driverId: string, range?: DateRange) {
+  const sb = await createClient();
+  let q = sb.from("pre_trips").select("items").eq("driver_id", driverId);
+  if (range?.from) q = q.gte("received_at_server", `${range.from}T00:00:00`);
+  if (range?.to) q = q.lte("received_at_server", `${range.to}T23:59:59.999`);
+  const { data, error } = await q.limit(2000);
+  if (error) throw error;
+  return (data ?? []).reduce(
+    (n, r) =>
+      n +
+      ((r.items as unknown as StoredItem[]) ?? []).filter(
+        (i) => i.status === "attention" && i.scored,
+      ).length,
+    0,
+  );
+}
+
 /**
- * Score = base + roadside inspection points + overdue wash points.
- * Reporting truck problems in a pre-trip never changes it.
+ * Score = base + roadside inspection points + overdue wash points
+ * + pre-trip "No" answers on scored items.
+ * Reporting a mechanical problem (brakes, lights, tires, leaks) never changes it.
  */
 export async function getDriverScore(
   driverId: string,
   range?: DateRange,
 ): Promise<DriverScore> {
   await flagOverdueWashes();
-  const [s, list, overdue] = await Promise.all([
+  const [s, list, overdue, preTripNo] = await Promise.all([
     getScoring(),
     getRoadside({ driverId, range }),
     getOverdueEvents({ driverId, range }),
+    countPreTripNo(driverId, range),
   ]);
   const keys: RoadsideResult[] = ["clean", "violations", "out_of_service"];
   const lines: DriverScore["lines"] = keys.map((key) => {
@@ -640,6 +675,13 @@ export async function getDriverScore(
     count: overdue.length,
     points: s.overdueWash,
     total: overdue.length * s.overdueWash,
+  });
+  lines.push({
+    key: "pre_trip_no",
+    label: 'Pre-trip "No" on a scored item',
+    count: preTripNo,
+    points: s.preTripNo ?? -2,
+    total: preTripNo * (s.preTripNo ?? -2),
   });
   return {
     base: s.baseScore,

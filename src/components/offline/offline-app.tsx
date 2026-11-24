@@ -725,7 +725,7 @@ export function OfflineApp() {
         />
         <SplitLayout aside={<OfflineTips />}>
           {snapshot.trucks?.length ? (
-            <PreTripForm trucks={snapshot.trucks} />
+            <PreTripForm trucks={snapshot.trucks} items={snapshot.checklist} />
           ) : (
             <p className="rounded-xl border border-dashed bg-card px-4 py-10 text-center text-sm text-muted-foreground">
               No trucks saved on this phone yet. Open the app once with signal,

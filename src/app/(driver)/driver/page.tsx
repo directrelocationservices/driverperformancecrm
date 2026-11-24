@@ -5,6 +5,7 @@ import Link from "next/link";
 import { endOfMonth, format, startOfMonth } from "date-fns";
 import {
   ArrowRight,
+  CalendarCheck,
   ClipboardList,
   DollarSign,
   PlusCircle,
@@ -25,8 +26,15 @@ import {
   getTrucks,
   getCarrierChoices,
   getOffloadForms,
+  getChecklist,
+  getCurrentTruckId,
+  getDriverDocStatus,
+  getLastMonthlyChecks,
+  getTripBlocks,
 } from "@/lib/data";
+import { monthlyCheckDue } from "@/lib/readiness";
 import { SnapshotSaver } from "@/components/driver/snapshot-saver";
+import { DocReminders, TripBlocks } from "@/components/fleet/trip-blocks";
 
 export default async function DriverHome() {
   const user = await requireRole("driver");
@@ -36,15 +44,33 @@ export default async function DriverHome() {
     to: format(endOfMonth(now), "yyyy-MM-dd"),
   };
 
-  const [metrics, jobs, drivers, trucks, carriers, offloadForms] =
-    await Promise.all([
-      getDriverMetrics(user.id, { range }),
-      getDriverJobSummaries(user.id),
-      getDrivers(),
-      getTrucks(false),
-      getCarrierChoices(),
-      getOffloadForms(),
-    ]);
+  const [
+    metrics,
+    jobs,
+    drivers,
+    trucks,
+    carriers,
+    offloadForms,
+    checklist,
+    blocks,
+    myDocs,
+    truckId,
+    lastMonthly,
+  ] = await Promise.all([
+    getDriverMetrics(user.id, { range }),
+    getDriverJobSummaries(user.id),
+    getDrivers(),
+    getTrucks(false),
+    getCarrierChoices(),
+    getOffloadForms(),
+    getChecklist(),
+    getTripBlocks(user.id),
+    getDriverDocStatus(user.id),
+    getCurrentTruckId(user.id),
+    getLastMonthlyChecks(),
+  ]);
+  const myTruck = trucks.find((t) => t.id === truckId);
+  const monthlyDue = !!myTruck && monthlyCheckDue(lastMonthly[myTruck.id]);
   const recent = jobs.slice(0, 6);
   const firstName = user.name.split(" ")[0];
 
@@ -78,6 +104,8 @@ export default async function DriverHome() {
             name: f.name,
             required: f.required,
           })),
+          // The daily checklist for the offline pre-trip check
+          checklist,
         }}
       />
       {/* Greeting */}
@@ -92,6 +120,22 @@ export default async function DriverHome() {
 
       {/* Install app (only shows on phones that haven't installed it) */}
       <InstallPrompt />
+
+      {/* Roadside readiness */}
+      <TripBlocks blocks={blocks} />
+      <DocReminders statuses={myDocs} href="/driver/documents" />
+      {monthlyDue && (
+        <Link
+          href="/driver/monthly-check/new"
+          className="flex items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-900 transition hover:border-amber-300 sm:p-5"
+        >
+          <CalendarCheck className="h-5 w-5 shrink-0" />
+          <p className="min-w-0 flex-1 font-semibold">
+            Monthly truck check due for Unit {myTruck.unitNumber}
+          </p>
+          <ArrowRight className="h-5 w-5 shrink-0" />
+        </Link>
+      )}
 
       {/* Primary action */}
       <Link

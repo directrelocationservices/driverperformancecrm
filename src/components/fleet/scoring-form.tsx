@@ -41,6 +41,11 @@ const FIELDS: { key: keyof ScoringSettings; label: string; hint: string }[] = [
     label: "Overdue wash",
     hint: "Points removed for each overdue wash (0 or less)",
   },
+  {
+    key: "preTripNo",
+    label: 'Pre-trip "No"',
+    hint: 'Points removed for each "No" on an item marked "counts on score" (0 or less)',
+  },
 ];
 
 export function ScoringForm({ scoring }: { scoring: ScoringSettings }) {
@@ -49,7 +54,7 @@ export function ScoringForm({ scoring }: { scoring: ScoringSettings }) {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [v, setV] = useState(
     Object.fromEntries(
-      FIELDS.map((f) => [f.key, String(scoring[f.key])]),
+      FIELDS.map((f) => [f.key, String(scoring[f.key] ?? "")]),
     ) as Record<keyof ScoringSettings, string>,
   );
 
@@ -75,7 +80,7 @@ export function ScoringForm({ scoring }: { scoring: ScoringSettings }) {
     <form onSubmit={save} noValidate className="mt-8">
       <SectionRow
         title="Driver scoring"
-        description="Points for DOT roadside inspections and overdue truck washes. Changes apply to every driver's score right away."
+        description='Points for DOT roadside inspections, overdue truck washes and pre-trip "No" answers. Changes apply to every driver&apos;s score right away.'
       >
         <div className="grid gap-5 sm:grid-cols-2">
           {FIELDS.map((f) => (

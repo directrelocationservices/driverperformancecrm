@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   ClipboardPen,
   DollarSign,
+  IdCard,
   Mail,
   Phone,
   Plus,
@@ -32,6 +33,8 @@ import {
   getTrucks,
   getUserById,
   pointsFor,
+  getDriverDocStatus,
+  getUsers,
 } from "@/lib/data";
 import { resolveFilters, type FilterParams } from "@/lib/periods";
 import { formatCurrency, formatPercent } from "@/lib/format";
@@ -43,6 +46,9 @@ import { JobsTable } from "@/components/admin/jobs-table";
 import { TrendChart } from "@/components/driver/trend-chart";
 import { ScoreCard } from "@/components/fleet/score-card";
 import { RoadsideList } from "@/components/fleet/roadside-list";
+import { DocList } from "@/components/fleet/doc-list";
+import { DocUpload } from "@/components/fleet/doc-upload";
+import { DRIVER_DOC_TYPES } from "@/types";
 
 const rate = (v: number | null) => (v === null ? "—" : formatPercent(v));
 
@@ -60,17 +66,30 @@ export default async function AdminDriverProfile({
 
   const { range, verifiedOnly, label } = resolveFilters(await searchParams);
 
-  const [m, trend, jobs, score, roadside, trucks, scoring, missed] =
-    await Promise.all([
-      getDriverMetrics(id, { range, verifiedOnly }),
-      getDriverMonthlyTrend(id, 6),
-      getAllJobSummaries({ range, driverId: id }),
-      getDriverScore(id, range),
-      getRoadside({ driverId: id, range }),
-      getTrucks(),
-      getScoring(),
-      countOfficeEnteredJobs(id, range),
-    ]);
+  const [
+    m,
+    trend,
+    jobs,
+    score,
+    roadside,
+    trucks,
+    scoring,
+    missed,
+    docStatus,
+    users,
+  ] = await Promise.all([
+    getDriverMetrics(id, { range, verifiedOnly }),
+    getDriverMonthlyTrend(id, 6),
+    getAllJobSummaries({ range, driverId: id }),
+    getDriverScore(id, range),
+    getRoadside({ driverId: id, range }),
+    getTrucks(),
+    getScoring(),
+    countOfficeEnteredJobs(id, range),
+    getDriverDocStatus(id),
+    getUsers(),
+  ]);
+  const names = Object.fromEntries(users.map((u) => [u.id, u.name]));
 
   const units = Object.fromEntries(trucks.map((t) => [t.id, t.unitNumber]));
 
@@ -138,6 +157,29 @@ export default async function AdminDriverProfile({
       <div className="space-y-6">
         {/* Score + breakdown */}
         <ScoreCard score={score} period={label} />
+
+        {/* Roadside documents */}
+        <section>
+          <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h2 className="flex items-center gap-2 text-lg font-bold sm:text-xl">
+                <IdCard className="h-5 w-5 text-primary" /> DOT medical card and
+                license
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                The driver uploads these in the app. Once one expires, the
+                driver can&apos;t start a trip.
+              </p>
+            </div>
+            <DocUpload
+              owner="driver"
+              ownerId={driver.id}
+              types={DRIVER_DOC_TYPES}
+              as="admin"
+            />
+          </div>
+          <DocList statuses={docStatus} names={names} canDelete />
+        </section>
 
         {/* Metrics */}
         <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">

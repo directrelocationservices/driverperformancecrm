@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   AlertTriangle,
   ArrowRight,
+  Ban,
   CheckCircle2,
   Clock,
   CloudOff,
@@ -27,14 +28,14 @@ import { TicketStatusPill, TruckStatusPill } from "./status-badges";
 import { ConditionPhotoGrid } from "./wash-bits";
 import { cn } from "@/lib/utils";
 
-const itemLabel = ticketItemLabel;
-
 export function InspectionDetail({
   inspection,
   truck,
   driverName,
   tickets,
   ticketHref,
+  clearedByName,
+  holdAction,
 }: {
   inspection: PreTripInspection;
   truck: Truck | null;
@@ -42,10 +43,71 @@ export function InspectionDetail({
   tickets: MaintenanceTicket[];
   /** Link for "View" on each ticket (admin only) */
   ticketHref?: string;
+  /** Who cleared the trip hold */
+  clearedByName?: string;
+  /** Admin: the "Clear hold" form */
+  holdAction?: React.ReactNode;
 }) {
+  const hold = inspection.hold;
+  const heldItems = inspection.items.filter(
+    (i) => i.status === "attention" && i.blocks,
+  );
   return (
     <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_380px] xl:gap-6">
       <div className="min-w-0 space-y-5">
+        {/* Trip hold */}
+        {hold.blocked && (
+          <section
+            className={cn(
+              "rounded-2xl border p-4 sm:p-5",
+              hold.clearedAt
+                ? "border-green-200 bg-green-50"
+                : "border-red-200 bg-red-50",
+            )}
+          >
+            <div className="flex items-start gap-3">
+              {hold.clearedAt ? (
+                <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-green-700" />
+              ) : (
+                <Ban className="mt-0.5 h-5 w-5 shrink-0 text-red-700" />
+              )}
+              <div className="min-w-0 flex-1">
+                <p
+                  className={cn(
+                    "font-bold",
+                    hold.clearedAt ? "text-green-800" : "text-red-800",
+                  )}
+                >
+                  {hold.clearedAt ? "Trip hold cleared" : "Trip on hold"}
+                </p>
+                <p className="mt-0.5 text-sm text-foreground/80">
+                  &quot;No&quot; on{" "}
+                  {heldItems
+                    .map((i) => ticketItemLabel(i.key, i.label))
+                    .join(", ")}
+                  .
+                  {!hold.clearedAt &&
+                    " The driver can't start a trip until an admin clears it."}
+                </p>
+                {hold.clearedAt && (
+                  <p className="mt-2 text-sm">
+                    <span className="font-semibold">
+                      {clearedByName ?? "Admin"}
+                    </span>{" "}
+                    · {formatDateTimeET(hold.clearedAt)}
+                    {hold.clearNote && (
+                      <span className="block text-muted-foreground">
+                        {hold.clearNote}
+                      </span>
+                    )}
+                  </p>
+                )}
+                {!hold.clearedAt && holdAction}
+              </div>
+            </div>
+          </section>
+        )}
+
         {/* Header */}
         <div className="overflow-hidden rounded-2xl bg-secondary text-white">
           <div className="h-1 bg-primary" />
@@ -171,14 +233,23 @@ export function InspectionDetail({
             {inspection.items.map((it) => (
               <li key={it.key} className="px-4 py-4 sm:px-5">
                 <div className="flex items-center justify-between gap-3">
-                  <p className="font-semibold">{itemLabel(it.key)}</p>
+                  <p className="font-semibold">
+                    {ticketItemLabel(it.key, it.label)}
+                  </p>
                   {it.status === "ok" ? (
-                    <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-green-700">
-                      <CheckCircle2 className="h-4 w-4" /> OK
+                    <span className="inline-flex shrink-0 items-center gap-1.5 text-sm font-semibold text-green-700">
+                      <CheckCircle2 className="h-4 w-4" />{" "}
+                      {it.label ? "Yes" : "OK"}
                     </span>
                   ) : (
-                    <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-amber-700">
-                      <AlertTriangle className="h-4 w-4" /> Needs attention
+                    <span
+                      className={cn(
+                        "inline-flex shrink-0 items-center gap-1.5 text-sm font-semibold",
+                        it.blocks ? "text-red-700" : "text-amber-700",
+                      )}
+                    >
+                      <AlertTriangle className="h-4 w-4" />{" "}
+                      {it.label ? "No" : "Needs attention"}
                     </span>
                   )}
                 </div>
@@ -198,7 +269,7 @@ export function InspectionDetail({
                       <PhotoThumb
                         key={src + i}
                         src={src}
-                        alt={`${itemLabel(it.key)} photo ${i + 1}`}
+                        alt={`${ticketItemLabel(it.key, it.label)} photo ${i + 1}`}
                       />
                     ))}
                   </div>
@@ -238,7 +309,9 @@ export function InspectionDetail({
                   className="flex items-center justify-between gap-3 px-4 py-3 sm:px-5"
                 >
                   <div className="min-w-0">
-                    <p className="font-semibold">{itemLabel(t.itemKey)}</p>
+                    <p className="font-semibold">
+                      {ticketItemLabel(t.itemKey, t.itemLabel)}
+                    </p>
                     {t.notes && (
                       <p className="truncate text-sm text-muted-foreground">
                         {t.notes}

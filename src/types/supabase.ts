@@ -420,6 +420,106 @@ export type Database = {
           },
         ];
       };
+      doc_expiry_alerts: {
+        Row: {
+          document_id: string;
+          sent_at: string;
+          stage: string;
+        };
+        Insert: {
+          document_id: string;
+          sent_at?: string;
+          stage: string;
+        };
+        Update: {
+          document_id?: string;
+          sent_at?: string;
+          stage?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "doc_expiry_alerts_document_id_fkey";
+            columns: ["document_id"];
+            isOneToOne: false;
+            referencedRelation: "fleet_documents";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      fleet_documents: {
+        Row: {
+          created_at: string;
+          deleted_at: string | null;
+          deleted_by: string | null;
+          doc_type: string;
+          driver_id: string | null;
+          expires_on: string | null;
+          file_names: string[];
+          file_paths: string[];
+          id: string;
+          title: string | null;
+          truck_id: string | null;
+          uploaded_by: string | null;
+        };
+        Insert: {
+          created_at?: string;
+          deleted_at?: string | null;
+          deleted_by?: string | null;
+          doc_type: string;
+          driver_id?: string | null;
+          expires_on?: string | null;
+          file_names?: string[];
+          file_paths: string[];
+          id?: string;
+          title?: string | null;
+          truck_id?: string | null;
+          uploaded_by?: string | null;
+        };
+        Update: {
+          created_at?: string;
+          deleted_at?: string | null;
+          deleted_by?: string | null;
+          doc_type?: string;
+          driver_id?: string | null;
+          expires_on?: string | null;
+          file_names?: string[];
+          file_paths?: string[];
+          id?: string;
+          title?: string | null;
+          truck_id?: string | null;
+          uploaded_by?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "fleet_documents_deleted_by_fkey";
+            columns: ["deleted_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "fleet_documents_driver_id_fkey";
+            columns: ["driver_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "fleet_documents_truck_id_fkey";
+            columns: ["truck_id"];
+            isOneToOne: false;
+            referencedRelation: "trucks";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "fleet_documents_uploaded_by_fkey";
+            columns: ["uploaded_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       granot_events: {
         Row: {
           event_type: string;
@@ -852,6 +952,7 @@ export type Database = {
           id: string;
           inspection_id: string;
           item_key: string;
+          item_label: string | null;
           notes: string | null;
           photo_paths: string[];
           severity: Database["public"]["Enums"]["truck_status"];
@@ -868,6 +969,7 @@ export type Database = {
           id?: string;
           inspection_id: string;
           item_key: string;
+          item_label?: string | null;
           notes?: string | null;
           photo_paths?: string[];
           severity: Database["public"]["Enums"]["truck_status"];
@@ -884,6 +986,7 @@ export type Database = {
           id?: string;
           inspection_id?: string;
           item_key?: string;
+          item_label?: string | null;
           notes?: string | null;
           photo_paths?: string[];
           severity?: Database["public"]["Enums"]["truck_status"];
@@ -1124,7 +1227,11 @@ export type Database = {
       };
       pre_trips: {
         Row: {
+          blocked: boolean;
           captured_at_device: string;
+          clear_note: string | null;
+          cleared_at: string | null;
+          cleared_by: string | null;
           condition_photos: Json;
           driver_id: string;
           id: string;
@@ -1143,7 +1250,11 @@ export type Database = {
           washed: boolean;
         };
         Insert: {
+          blocked?: boolean;
           captured_at_device: string;
+          clear_note?: string | null;
+          cleared_at?: string | null;
+          cleared_by?: string | null;
           condition_photos?: Json;
           driver_id: string;
           id?: string;
@@ -1162,7 +1273,11 @@ export type Database = {
           washed?: boolean;
         };
         Update: {
+          blocked?: boolean;
           captured_at_device?: string;
+          clear_note?: string | null;
+          cleared_at?: string | null;
+          cleared_by?: string | null;
           condition_photos?: Json;
           driver_id?: string;
           id?: string;
@@ -1181,6 +1296,13 @@ export type Database = {
           washed?: boolean;
         };
         Relationships: [
+          {
+            foreignKeyName: "pre_trips_cleared_by_fkey";
+            columns: ["cleared_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
           {
             foreignKeyName: "pre_trips_driver_id_fkey";
             columns: ["driver_id"];
@@ -1405,6 +1527,7 @@ export type Database = {
           damage_alert_emails: string[];
           id: number;
           offload_alert_emails: string[];
+          pre_trip_items: Json;
           sales: Json;
           scoring: Json;
           updated_at: string;
@@ -1414,6 +1537,7 @@ export type Database = {
           damage_alert_emails?: string[];
           id?: number;
           offload_alert_emails?: string[];
+          pre_trip_items?: Json;
           sales?: Json;
           scoring?: Json;
           updated_at?: string;
@@ -1423,6 +1547,7 @@ export type Database = {
           damage_alert_emails?: string[];
           id?: number;
           offload_alert_emails?: string[];
+          pre_trip_items?: Json;
           sales?: Json;
           scoring?: Json;
           updated_at?: string;
@@ -1454,6 +1579,57 @@ export type Database = {
             columns: ["user_id"];
             isOneToOne: false;
             referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      truck_monthly_checks: {
+        Row: {
+          captured_at_device: string;
+          driver_id: string;
+          id: string;
+          items: Json;
+          lat: number | null;
+          lng: number | null;
+          notes: string | null;
+          received_at_server: string;
+          truck_id: string;
+        };
+        Insert: {
+          captured_at_device: string;
+          driver_id: string;
+          id?: string;
+          items: Json;
+          lat?: number | null;
+          lng?: number | null;
+          notes?: string | null;
+          received_at_server?: string;
+          truck_id: string;
+        };
+        Update: {
+          captured_at_device?: string;
+          driver_id?: string;
+          id?: string;
+          items?: Json;
+          lat?: number | null;
+          lng?: number | null;
+          notes?: string | null;
+          received_at_server?: string;
+          truck_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "truck_monthly_checks_driver_id_fkey";
+            columns: ["driver_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "truck_monthly_checks_truck_id_fkey";
+            columns: ["truck_id"];
+            isOneToOne: false;
+            referencedRelation: "trucks";
             referencedColumns: ["id"];
           },
         ];
@@ -1698,6 +1874,10 @@ export type Database = {
         };
         Returns: string;
       };
+      admin_clear_pre_trip_hold: {
+        Args: { p_id: string; p_note: string };
+        Returns: string;
+      };
       admin_clear_sample_leads: { Args: never; Returns: number };
       admin_correct_damage: {
         Args: {
@@ -1792,6 +1972,7 @@ export type Database = {
         }[];
       };
       flag_overdue_washes: { Args: never; Returns: number };
+      get_pre_trip_items: { Args: never; Returns: Json };
       get_scoring: { Args: never; Returns: Json };
       is_admin: { Args: never; Returns: boolean };
       lead_cost_for: {

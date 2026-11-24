@@ -6,7 +6,10 @@ import { notFound } from "next/navigation";
 import {
   AlertTriangle,
   ArrowLeft,
+  Ban,
+  CalendarCheck,
   Camera,
+  FileText,
   ClipboardCheck,
   Droplets,
   Gauge,
@@ -29,7 +32,12 @@ import {
   getWashes,
   pointsFor,
   washStatusOf,
+  getDocuments,
+  getTruckDocStatus,
+  getMonthlyChecks,
+  getOpenHolds,
 } from "@/lib/data";
+import { monthlyCheckDue } from "@/lib/readiness";
 import { formatDateTimeET } from "@/lib/format";
 import { StatCard } from "@/components/shared/stat-card";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -46,6 +54,11 @@ import {
   WashStatusPill,
 } from "@/components/fleet/wash-bits";
 import { OverdueList } from "@/components/fleet/overdue-list";
+import { DocList } from "@/components/fleet/doc-list";
+import { DocUpload } from "@/components/fleet/doc-upload";
+import { MonthlyCheckList } from "@/components/fleet/monthly-check-list";
+import { HoldClear } from "@/components/fleet/hold-clear";
+import { TRUCK_DOC_TYPES } from "@/types";
 
 export default async function TruckDetailPage({
   params,
@@ -68,6 +81,9 @@ export default async function TruckDetailPage({
     condition,
     washes,
     overdue,
+    docs,
+    monthly,
+    holds,
   ] = await Promise.all([
     getTickets({ truckId: id }),
     getPreTrips({ truckId: id }),
@@ -78,7 +94,14 @@ export default async function TruckDetailPage({
     getLatestCondition(id),
     getWashes({ truckId: id }),
     getOverdueEvents({ truckId: id }),
+    getDocuments({ truckId: id }),
+    getMonthlyChecks({ truckId: id, limit: 12 }),
+    getOpenHolds({ truckId: id }),
   ]);
+  const docStatus = await getTruckDocStatus(id, docs);
+  const otherDocs = docs.filter((d) => d.docType === "other");
+  const monthlyDue =
+    truck.active && monthlyCheckDue(monthly[0]?.receivedAtServer);
   const names = Object.fromEntries(users.map((u) => [u.id, u.name]));
   const open = tickets.filter((t) => t.status !== "fixed").length;
   const wash = washStatusOf(truck, scoring);
@@ -125,6 +148,30 @@ export default async function TruckDetailPage({
         />
       </div>
 
+      {/* Trip holds on this truck */}
+      {holds.map((h) => (
+        <section
+          key={h.preTripId}
+          className="rounded-2xl border border-red-200 bg-red-50 p-4 sm:p-5"
+        >
+          <p className="flex items-center gap-2 font-bold text-red-800">
+            <Ban className="h-5 w-5" /> Trip on hold
+          </p>
+          <p className="mt-1 text-sm">
+            {names[h.driverId] ?? "Driver"} answered &quot;No&quot; to{" "}
+            {h.items.map((i) => i.label).join(", ")} · {formatDateTimeET(h.at)}{" "}
+            ·{" "}
+            <Link
+              href={`/admin/pre-trip/${h.preTripId}`}
+              className="font-semibold text-primary hover:underline"
+            >
+              View pre-trip
+            </Link>
+          </p>
+          <HoldClear preTripId={h.preTripId} />
+        </section>
+      ))}
+
       <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <StatCard
           label="Last wash"
@@ -149,6 +196,33 @@ export default async function TruckDetailPage({
           icon={Gauge}
         />
       </div>
+
+      {/* Roadside documents */}
+      <section>
+        <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="flex items-center gap-2 text-lg font-bold sm:text-xl">
+              <FileText className="h-5 w-5 text-primary" /> Roadside documents
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              Drivers can open these in the app. An expired registration,
+              insurance or annual inspection blocks trips with this truck.
+            </p>
+          </div>
+          <DocUpload
+            owner="truck"
+            ownerId={truck.id}
+            types={TRUCK_DOC_TYPES}
+            as="admin"
+          />
+        </div>
+        <DocList
+          statuses={docStatus}
+          others={otherDocs}
+          names={names}
+          canDelete
+        />
+      </section>
 
       {/* Latest condition photos */}
       <section className="rounded-2xl border bg-card p-4 sm:p-5">
@@ -229,6 +303,21 @@ export default async function TruckDetailPage({
         ) : (
           <EmptyState icon={Wrench} title="No maintenance tickets" />
         )}
+      </section>
+
+      <section id="monthly" className="scroll-mt-24">
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <h2 className="flex items-center gap-2 text-lg font-bold sm:text-xl">
+            <CalendarCheck className="h-5 w-5 text-primary" /> Monthly truck
+            checks
+          </h2>
+          {monthlyDue && <Pill tone="warning">Due this month</Pill>}
+        </div>
+        <MonthlyCheckList
+          checks={monthly}
+          names={names}
+          emptyText="No monthly checks yet. Drivers do them from Pre-trip → Monthly truck check."
+        />
       </section>
 
       <section>

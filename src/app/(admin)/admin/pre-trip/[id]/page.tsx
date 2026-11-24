@@ -1,9 +1,13 @@
+// File: src/app/(admin)/admin/pre-trip/[id]/page.tsx
+// (REPLACE the whole file)
+
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { requireRole } from "@/lib/auth/session";
 import { getPreTrip, getTickets, getTruck, getUserById } from "@/lib/data";
 import { InspectionDetail } from "@/components/fleet/inspection-detail";
+import { HoldClear } from "@/components/fleet/hold-clear";
 
 export default async function AdminPreTripDetail({
   params,
@@ -15,10 +19,11 @@ export default async function AdminPreTripDetail({
   const inspection = await getPreTrip(id);
   if (!inspection) notFound();
 
-  const [truck, tickets, driver] = await Promise.all([
+  const [truck, tickets, driver, clearedBy] = await Promise.all([
     getTruck(inspection.truckId),
     getTickets({ inspectionId: id }),
     getUserById(inspection.driverId),
+    inspection.hold.clearedBy ? getUserById(inspection.hold.clearedBy) : null,
   ]);
 
   return (
@@ -35,6 +40,8 @@ export default async function AdminPreTripDetail({
         driverName={driver?.name ?? "Unknown"}
         tickets={tickets}
         ticketHref="/admin/maintenance"
+        clearedByName={clearedBy?.name}
+        holdAction={<HoldClear preTripId={inspection.id} />}
       />
     </div>
   );

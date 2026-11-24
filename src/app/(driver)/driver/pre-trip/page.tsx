@@ -1,20 +1,35 @@
+// File: src/app/(driver)/driver/pre-trip/page.tsx
+// (REPLACE the whole file)
+
 import Link from "next/link";
-import { ArrowRight, ClipboardCheck } from "lucide-react";
+import { ArrowRight, CalendarCheck, ClipboardCheck } from "lucide-react";
 import { requireRole } from "@/lib/auth/session";
-import { getPreTrips, getTrucks } from "@/lib/data";
+import {
+  getCurrentTruckId,
+  getLastMonthlyChecks,
+  getMonthlyChecks,
+  getPreTrips,
+  getTrucks,
+} from "@/lib/data";
+import { monthlyCheckDue } from "@/lib/readiness";
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
 import { PreTripCard } from "@/components/fleet/pre-trip-card";
+import { MonthlyCheckList } from "@/components/fleet/monthly-check-list";
 
 export const metadata = { title: "Pre-trip" };
 
 export default async function PreTripListPage() {
   const user = await requireRole("driver");
-  const [list, trucks] = await Promise.all([
+  const [list, trucks, truckId, lastMonthly, monthly] = await Promise.all([
     getPreTrips({ driverId: user.id }),
     getTrucks(),
+    getCurrentTruckId(user.id),
+    getLastMonthlyChecks(),
+    getMonthlyChecks({ driverId: user.id, limit: 3 }),
   ]);
   const units = Object.fromEntries(trucks.map((t) => [t.id, t.unitNumber]));
+  const monthlyDue = truckId ? monthlyCheckDue(lastMonthly[truckId]) : false;
 
   return (
     <div className="space-y-6">
@@ -39,10 +54,33 @@ export default async function PreTripListPage() {
             Start pre-trip check
           </p>
           <p className="mt-0.5 text-sm text-white/60">
-            Tires, fluids, lights, brakes, mirrors and equipment
+            Daily roadside checklist, truck photos and wash
           </p>
         </div>
         <ArrowRight className="ml-auto h-6 w-6 shrink-0 text-white/70 transition group-hover:translate-x-1" />
+      </Link>
+
+      <Link
+        href="/driver/monthly-check/new"
+        className="group flex items-center gap-4 rounded-2xl border bg-card p-4 transition hover:border-primary/40 sm:p-5"
+      >
+        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+          <CalendarCheck className="h-6 w-6" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="font-bold">Monthly truck check</p>
+          <p className="text-sm text-muted-foreground">
+            USDOT markings, inspection decal and rear impact guard. One photo
+            each.
+          </p>
+        </div>
+        {monthlyDue ? (
+          <span className="shrink-0 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
+            Due this month
+          </span>
+        ) : (
+          <ArrowRight className="h-5 w-5 shrink-0 text-muted-foreground transition group-hover:translate-x-1" />
+        )}
       </Link>
 
       <section>
@@ -68,6 +106,15 @@ export default async function PreTripListPage() {
           />
         )}
       </section>
+
+      {monthly.length > 0 && (
+        <section>
+          <h2 className="mb-3 text-lg font-bold sm:text-xl">
+            Your monthly checks
+          </h2>
+          <MonthlyCheckList checks={monthly} units={units} />
+        </section>
+      )}
     </div>
   );
 }

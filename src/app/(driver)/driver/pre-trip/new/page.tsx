@@ -4,16 +4,29 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { requireRole } from "@/lib/auth/session";
-import { getTrucks } from "@/lib/data";
+import {
+  getChecklist,
+  getTripBlocks,
+  getTruckBlocks,
+  getTrucks,
+} from "@/lib/data";
 import { PageHeader } from "@/components/shared/page-header";
 import { DriverFormLayout } from "@/components/driver/form-layout";
 import { PreTripForm } from "@/components/fleet/pre-trip-form";
+import { TripBlocks } from "@/components/fleet/trip-blocks";
 
 export const metadata = { title: "New pre-trip" };
 
 export default async function NewPreTripPage() {
-  await requireRole("driver");
-  const trucks = await getTrucks(false);
+  const user = await requireRole("driver");
+  const [trucks, checklist, tripBlocks] = await Promise.all([
+    getTrucks(false),
+    getChecklist(),
+    getTripBlocks(user.id),
+  ]);
+  const blockedTrucks = await getTruckBlocks(trucks.map((t) => t.id));
+  // An expired medical card or license stops the pre-trip too
+  const driverBlocks = tripBlocks.filter((b) => b.kind === "driver_doc");
 
   return (
     <div>
@@ -27,26 +40,32 @@ export default async function NewPreTripPage() {
         title="Pre-trip inspection"
         description="Walk around the truck before you drive."
       />
-      <DriverFormLayout
-        tips={[
-          "Take all 5 condition photos: front, rear, both sides and the cab.",
-          "If the truck was washed since the last trip, add a photo of the clean truck.",
-          "Check every item, even if you drove this truck yesterday.",
-          "Add a clear photo for anything that needs attention.",
-          "Flagged items go straight to the maintenance team.",
-          'Choose "Do not drive" if the truck is unsafe. Admin is alerted right away.',
-          "Reporting problems never lowers your score.",
-        ]}
-      >
-        <PreTripForm
-          trucks={trucks.map((t) => ({
-            id: t.id,
-            unitNumber: t.unitNumber,
-            description: t.description,
-            status: t.status,
-          }))}
-        />
-      </DriverFormLayout>
+      {driverBlocks.length ? (
+        <TripBlocks blocks={driverBlocks} />
+      ) : (
+        <DriverFormLayout
+          tips={[
+            "Take all 5 condition photos: front, rear, both sides and the cab.",
+            "If the truck was washed since the last trip, add a photo of the clean truck.",
+            "Answer Yes or No for every item, even if you drove this truck yesterday.",
+            '"No" needs a note and a clear photo. Admin is alerted right away.',
+            '"No" on logs or the fire extinguisher / triangles puts the trip on hold until an admin clears it.',
+            'Choose "Do not drive" if the truck is unsafe.',
+            "Reporting a truck problem never lowers your score.",
+          ]}
+        >
+          <PreTripForm
+            trucks={trucks.map((t) => ({
+              id: t.id,
+              unitNumber: t.unitNumber,
+              description: t.description,
+              status: t.status,
+            }))}
+            items={checklist}
+            blockedTrucks={blockedTrucks}
+          />
+        </DriverFormLayout>
+      )}
     </div>
   );
 }
