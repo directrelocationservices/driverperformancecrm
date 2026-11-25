@@ -1,5 +1,5 @@
 // File: src/components/fleet/checklist-settings-form.tsx
-// (NEW file)
+// (REPLACE the whole file)
 
 "use client";
 
@@ -201,7 +201,8 @@ export function ChecklistSettingsForm({ items }: { items: ChecklistItem[] }) {
               onClick={() => setRows(toRows(DEFAULT_CHECKLIST))}
               className="flex h-11 items-center gap-1.5 rounded-lg px-4 text-sm font-semibold text-muted-foreground hover:bg-muted"
             >
-              <RotateCcw className="h-4 w-4" /> Reset to the 9 roadside items
+              <RotateCcw className="h-4 w-4" /> Reset to the default roadside
+              items
             </button>
           </div>
         </div>

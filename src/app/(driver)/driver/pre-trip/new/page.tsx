@@ -49,7 +49,7 @@ export default async function NewPreTripPage() {
             "If the truck was washed since the last trip, add a photo of the clean truck.",
             "Answer Yes or No for every item, even if you drove this truck yesterday.",
             '"No" needs a note and a clear photo. Admin is alerted right away.',
-            '"No" on logs or the fire extinguisher / triangles puts the trip on hold until an admin clears it.',
+            'Items marked "No puts the trip on hold" stop the trip until an admin clears it.',
             'Choose "Do not drive" if the truck is unsafe.',
             "Reporting a truck problem never lowers your score.",
           ]}

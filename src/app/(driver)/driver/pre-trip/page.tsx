@@ -70,8 +70,7 @@ export default async function PreTripListPage() {
         <div className="min-w-0 flex-1">
           <p className="font-bold">Monthly truck check</p>
           <p className="text-sm text-muted-foreground">
-            USDOT markings, inspection decal and rear impact guard. One photo
-            each.
+            USDOT markings, mud flaps and rear impact guard. One photo each.
           </p>
         </div>
         {monthlyDue ? (
