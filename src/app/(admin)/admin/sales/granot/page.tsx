@@ -30,6 +30,7 @@ const TYPE_LABELS: Record<string, string> = {
   booked: "Booked",
   unbooked: "Unbooked",
   priority: "Priority update",
+  user_update: "User / Rep update",
   unknown: "Unknown",
 };
 

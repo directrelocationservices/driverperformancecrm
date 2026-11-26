@@ -74,9 +74,21 @@ async function apply(
     .eq("granot_id", ev.jobNumber)
     .maybeSingle();
 
-  const repId = await findRep(sb, ev.rep);
+  // A User / Rep change only updates a lead we already have (never creates one)
+  if (ev.type === "user_update" && !existing)
+    return {
+      status: "ignored",
+      message: "User / Rep update for a lead that isn't in the portal",
+    };
+
+  const [repId, bookRepId] = await Promise.all([
+    findRep(sb, ev.rep),
+    findRep(sb, ev.bookRep),
+  ]);
   const notes: string[] = [];
-  if (ev.rep && !repId) notes.push(`Rep "${ev.rep}" not found in portal`);
+  if (ev.rep && !repId) notes.push(`User "${ev.rep}" not found in portal`);
+  if (ev.bookRep && !bookRepId)
+    notes.push(`Rep "${ev.bookRep}" not found in portal`);
 
   // Every event can create the lead if the "new lead" event never arrived
   let leadId = existing?.id ?? null;
@@ -94,6 +106,8 @@ async function apply(
       status: "open",
       granot_source: ev.source,
       granot_rep: ev.rep,
+      granot_book_rep: ev.bookRep,
+      book_rep_id: bookRepId,
       raw,
       is_sample: !!opts.sample,
     };
@@ -126,6 +140,10 @@ async function apply(
     patch.granot_rep = ev.rep;
     patch.rep_id = repId;
   }
+  if (ev.bookRep) {
+    patch.granot_book_rep = ev.bookRep;
+    patch.book_rep_id = bookRepId;
+  }
 
   if (ev.type === "booked") {
     patch.status = "booked";
@@ -144,6 +162,12 @@ async function apply(
     notes.push("Marked open (unbooked)");
   } else if (ev.type === "priority") {
     notes.push("Priority update");
+  } else if (ev.type === "user_update") {
+    notes.push(
+      [ev.rep && `User: ${ev.rep}`, ev.bookRep && `Rep: ${ev.bookRep}`]
+        .filter(Boolean)
+        .join(", ") || "User / Rep update",
+    );
   } else if (existing) {
     notes.push("Lead already existed");
   }

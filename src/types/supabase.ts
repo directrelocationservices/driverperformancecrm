@@ -867,10 +867,12 @@ export type Database = {
       };
       leads: {
         Row: {
+          book_rep_id: string | null;
           booked_date: string | null;
           cost_overridden: boolean;
           created_at: string;
           date: string;
+          granot_book_rep: string | null;
           granot_id: string;
           granot_rep: string | null;
           granot_source: string | null;
@@ -887,10 +889,12 @@ export type Database = {
           updated_at: string;
         };
         Insert: {
+          book_rep_id?: string | null;
           booked_date?: string | null;
           cost_overridden?: boolean;
           created_at?: string;
           date: string;
+          granot_book_rep?: string | null;
           granot_id: string;
           granot_rep?: string | null;
           granot_source?: string | null;
@@ -907,10 +911,12 @@ export type Database = {
           updated_at?: string;
         };
         Update: {
+          book_rep_id?: string | null;
           booked_date?: string | null;
           cost_overridden?: boolean;
           created_at?: string;
           date?: string;
+          granot_book_rep?: string | null;
           granot_id?: string;
           granot_rep?: string | null;
           granot_source?: string | null;
@@ -927,6 +933,13 @@ export type Database = {
           updated_at?: string;
         };
         Relationships: [
+          {
+            foreignKeyName: "leads_book_rep_id_fkey";
+            columns: ["book_rep_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
           {
             foreignKeyName: "leads_rep_id_fkey";
             columns: ["rep_id"];

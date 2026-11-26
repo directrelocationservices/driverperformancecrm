@@ -9,14 +9,17 @@
  */
 
 export type GranotEventType =
-  "new_lead" | "booked" | "unbooked" | "priority" | "unknown";
+  "new_lead" | "booked" | "unbooked" | "priority" | "user_update" | "unknown";
 
 export type GranotEvent = {
   type: GranotEventType;
   jobNumber: string | null;
   leadDate: string | null; // YYYY-MM-DD
   source: string | null;
+  /** Granot "user": the salesperson the lead is assigned to */
   rep: string | null;
+  /** Granot "rep" / book_by: the rep on the job */
+  bookRep: string | null;
   totalEstimate: number | null;
   bookedDate: string | null; // YYYY-MM-DD
   fields: Record<string, string>;
@@ -80,6 +83,9 @@ export function detectType(f: Record<string, string>): GranotEventType {
     pick(f, "lead_status", "event", "event_type") ?? ""
   ).toLowerCase();
   const status = (f.status ?? "").toLowerCase();
+  // "User Update": the User or the Rep was changed on the lead
+  if (/user|rep/.test(leadStatus) && /updat/.test(leadStatus))
+    return "user_update";
   if (/new/.test(leadStatus)) return "new_lead";
   if (/priorit/.test(leadStatus)) return "priority";
   if (/un-?book/.test(leadStatus) || /un-?book/.test(status)) return "unbooked";
@@ -99,17 +105,18 @@ export function parseGranot(input: Record<string, unknown>): GranotEvent {
     jobNumber: pick(f, "job_number", "jobnumber", "job_no", "job", "lead_id"),
     leadDate: parseDate(pick(f, "lead_date", "date", "created_date")),
     source: pick(f, "lead_source", "source", "lead_label", "referral"),
-    // Granot sends the rep's Granot username
+    // Granot usernames. "user" = who the lead is assigned to;
+    // "rep" / book_by = the rep on the job (kept separately)
     rep: pick(
       f,
-      "rep",
+      "user",
+      "username",
       "assigned_rep",
       "sales_rep",
       "salesman",
-      "user",
-      "username",
       "agent",
     ),
+    bookRep: pick(f, "rep", "book_by", "booked_by", "bookby"),
     totalEstimate: parseMoney(
       pick(f, "total_estimate", "estimate", "total", "job_value", "amount"),
     ),
